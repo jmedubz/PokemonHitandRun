@@ -1,0 +1,6 @@
+{
+  "name": "Pokemon: Hit & Run - Goldenrod City",
+  "description": "An open world 3D game inspired by Simpsons Hit & Run. Choose your goofy starter Pokémon, explore Goldenrod Town, kick NPCs, hijack cars with arcade driving physics, flee from the cops, spray water to grow trees, and enter the Simpsons house to duel Ash Ketchum and his Simpsons team!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

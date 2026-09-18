@@ -8658,13 +8658,12 @@ export default function App() {
       }
 
       // Follow the active player/vehicle with the focused sunlight shadow volume.
-      // Keep shadow refresh comfortably above the visibly-stepped range while still
-      // preserving the existing static-caster radius/culling optimisations. The old
-      // performance cadence (0.24s ~= 4 FPS) made dynamic shadows visibly trail the
-      // player, cars and aircraft even when the actual game was running smoothly.
+      // The light direction is constant, so the shadow camera only needs to follow
+      // at a controlled cadence. This avoids a full 1024/2048 shadow render pass on
+      // every frame while preserving smoothly lit geometry and moving shadows.
       const shadowFocus = e.activeAircraft?.position ?? e.activeCarPhysics?.position ?? e.playerMovement.position;
       shadowUpdateAccumulator += dt;
-      const shadowInterval = qualityTier === 'high' ? 1 / 60 : qualityTier === 'balanced' ? 1 / 45 : 1 / 30;
+      const shadowInterval = qualityTier === 'high' ? 1 / 28 : qualityTier === 'balanced' ? 1 / 18 : 0.24;
       const shadowMovedSq = Number.isFinite(lastShadowFocus.x)
         ? (shadowFocus.x - lastShadowFocus.x) ** 2 + (shadowFocus.z - lastShadowFocus.z) ** 2
         : Number.POSITIVE_INFINITY;

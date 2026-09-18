@@ -8658,12 +8658,13 @@ export default function App() {
       }
 
       // Follow the active player/vehicle with the focused sunlight shadow volume.
-      // The light direction is constant, so the shadow camera only needs to follow
-      // at a controlled cadence. This avoids a full 1024/2048 shadow render pass on
-      // every frame while preserving smoothly lit geometry and moving shadows.
+      // Keep shadow refresh comfortably above the visibly-stepped range while still
+      // preserving the existing static-caster radius/culling optimisations. The old
+      // performance cadence (0.24s ~= 4 FPS) made dynamic shadows visibly trail the
+      // player, cars and aircraft even when the actual game was running smoothly.
       const shadowFocus = e.activeAircraft?.position ?? e.activeCarPhysics?.position ?? e.playerMovement.position;
       shadowUpdateAccumulator += dt;
-      const shadowInterval = qualityTier === 'high' ? 1 / 28 : qualityTier === 'balanced' ? 1 / 18 : 0.24;
+      const shadowInterval = qualityTier === 'high' ? 1 / 60 : qualityTier === 'balanced' ? 1 / 45 : 1 / 30;
       const shadowMovedSq = Number.isFinite(lastShadowFocus.x)
         ? (shadowFocus.x - lastShadowFocus.x) ** 2 + (shadowFocus.z - lastShadowFocus.z) ** 2
         : Number.POSITIVE_INFINITY;
@@ -9473,7 +9474,19 @@ export default function App() {
           left: !!keys['KeyA'] || !!keys['ArrowLeft'],
           right: !!keys['KeyD'] || !!keys['ArrowRight'],
         };
+        // Match the normal on-foot steering camera behaviour: when A/D turns the
+        // parachute/player, carry that same yaw delta into the camera. This keeps
+        // any mouse-orbit offset the player chose, while the whole third-person
+        // view naturally follows the turn instead of being left behind.
+        const parachuteYawBeforeUpdate = parachute.yaw;
         const parachuteResult = parachute.update(dt, parachuteInputs, e.playerMovement, e.collisionSystem);
+        let parachuteTurnDelta = parachute.yaw - parachuteYawBeforeUpdate;
+        while (parachuteTurnDelta > Math.PI) parachuteTurnDelta -= Math.PI * 2;
+        while (parachuteTurnDelta < -Math.PI) parachuteTurnDelta += Math.PI * 2;
+        e.cameraAngle += parachuteTurnDelta;
+        while (e.cameraAngle > Math.PI) e.cameraAngle -= Math.PI * 2;
+        while (e.cameraAngle < -Math.PI) e.cameraAngle += Math.PI * 2;
+
         e.playerMesh.visible = true;
         e.playerMesh.position.copy(e.playerMovement.position);
         e.playerMesh.rotation.y = parachute.yaw;
@@ -11227,9 +11240,22 @@ export default function App() {
       showTemporaryNotification('Aircraft', 'Land or jump out before fast travelling.');
       return;
     }
-    if (engine.parachuteController) {
-      showTemporaryNotification('Parachute', 'Land before fast travelling.');
-      return;
+    const parachutingDuringTravel = engine.parachuteController;
+    // Fast travel remains available during freefall/parachuting. Preserve the
+    // player's current height above the local ground so a map warp moves the
+    // airborne player horizontally to the new district instead of cancelling the
+    // parachute or snapping them onto the ground.
+    let parachuteTravelAltitude = 0;
+    if (parachutingDuringTravel) {
+      const currentParachuteGround = engine.collisionSystem.getGroundHeightNear(
+        engine.playerMovement.position.x,
+        engine.playerMovement.position.z,
+        engine.playerMovement.position.y,
+        0.12,
+        1.2,
+        400,
+      );
+      parachuteTravelAltitude = Math.max(0.5, engine.playerMovement.position.y - currentParachuteGround);
     }
 
     // Fast travel must preserve the player's current third-person camera setup.
@@ -11347,6 +11373,11 @@ export default function App() {
       ? target.travelYaw!
       : Math.atan2(target.x - safe.x, target.z - safe.z);
 
+    const playerTravelPosition = safe.clone();
+    if (parachutingDuringTravel) {
+      playerTravelPosition.y = safe.y + parachuteTravelAltitude;
+    }
+
     if (engine.activeVehicle && engine.activeCarPhysics) {
       worldProgressRef.current.roadTripOrigin = null;
       engine.activeCarPhysics.position.set(safe.x, safe.y + 0.08, safe.z);
@@ -11361,11 +11392,25 @@ export default function App() {
       engine.charizardFlightSpeed = 0;
       engine.charizardVerticalSpeed = 0;
       engine.playerMesh.userData.charizardFlying = false;
-      // Reuse the same complete teleport reset used by Reset Pos so fast travel
-      // cannot leave jump/stomp/grounded state behind.
-      engine.playerMovement.resetForTeleport(safe, faceYaw, true);
-      engine.playerMesh.position.copy(safe);
-      engine.playerMesh.rotation.y = faceYaw;
+      if (parachutingDuringTravel) {
+        // Keep the existing controller/mode/velocity alive. PlayerMovement is only
+        // the shared transform while airborne, so reset it to the new position as
+        // ungrounded and let the parachute controller resume on the next frame.
+        engine.playerMovement.resetForTeleport(playerTravelPosition, faceYaw, false);
+        parachutingDuringTravel.yaw = faceYaw;
+        engine.playerMesh.position.copy(playerTravelPosition);
+        engine.playerMesh.rotation.y = faceYaw;
+        if (parachutingDuringTravel.mode === 'parachute') {
+          parachutingDuringTravel.canopy.position.copy(playerTravelPosition).add(new THREE.Vector3(0, 5.05, 0));
+          parachutingDuringTravel.canopy.rotation.y = faceYaw;
+        }
+      } else {
+        // Reuse the same complete teleport reset used by Reset Pos so fast travel
+        // cannot leave jump/stomp/grounded state behind.
+        engine.playerMovement.resetForTeleport(safe, faceYaw, true);
+        engine.playerMesh.position.copy(safe);
+        engine.playerMesh.rotation.y = faceYaw;
+      }
     }
 
     // Re-anchor the camera BEHIND the arrival heading without changing the user's
@@ -11380,7 +11425,7 @@ export default function App() {
     // immediately before travel.
     const focus = engine.activeVehicle && engine.activeCarPhysics
       ? engine.activeCarPhysics.position.clone()
-      : safe.clone();
+      : playerTravelPosition.clone();
     const focusHeight = engine.activeVehicle ? 1.45 : (engine.currentPokemonId === 'charizard' ? 1.38 : 1.1);
     engine.cameraAngle = faceYaw;
     engine.cameraPitch = preTravelCameraPitch;
@@ -11396,7 +11441,7 @@ export default function App() {
     engine.camera.position.copy(engine.collisionSystem.resolveCameraPosition(lookTarget, desiredCamera, 0.26, 0.20));
     engine.camera.lookAt(lookTarget);
 
-    setPlayerPos({ x: safe.x, y: safe.y, z: safe.z });
+    setPlayerPos({ x: playerTravelPosition.x, y: playerTravelPosition.y, z: playerTravelPosition.z });
     setPlayerYaw(faceYaw);
     if (target.name) {
       showTemporaryNotification(

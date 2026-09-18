@@ -884,7 +884,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] uppercase tracking-[0.18em] font-black text-violet-300">{parachute.mode === 'freefall' ? 'Freefall' : 'Parachute'}</div>
-                <div className="text-sm font-black text-white">{parachute.mode === 'freefall' ? 'SPACE TO DEPLOY' : 'Canopy deployed'}</div>
+                <div className="text-sm font-black text-white">{parachute.mode === 'freefall' ? 'SPACE TO DEPLOY' : 'E TO DROP AGAIN'}</div>
               </div>
               <div className="text-right">
                 <div className="text-lg font-black text-emerald-300 leading-none">{Math.round(parachute.altitude)}</div>

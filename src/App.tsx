@@ -5114,6 +5114,12 @@ export default function App() {
         e.playerMesh.visible = true;
         e.parachuteController?.destroy();
         e.parachuteController = new ParachuteController(e.scene, inheritedVelocity, plane.yaw);
+        // Start the parachute camera directly behind the bailout heading, then let
+        // the player orbit it freely with the normal mouse-drag camera controls.
+        e.cameraAngle = plane.yaw;
+        e.cameraPitch = 0.32;
+        e.cameraDistance = 7.2;
+        e.cameraTargetDistance = 7.2;
         setAircraftHud(null);
         setParachuteHud({ mode: 'freefall', altitude: 0, verticalSpeed: inheritedVelocity.y, deployment: 0 });
         setInVehicle(false);
@@ -6156,8 +6162,8 @@ export default function App() {
       }
       if (engine.parachuteController) {
         setInteractionPrompt(engine.parachuteController.mode === 'freefall'
-          ? '[SPACE] DEPLOY PARACHUTE  •  [W/A/S/D] Air steer'
-          : '[W] Glide  •  [A/D] Steer  •  [S] Slow / steeper descent');
+          ? '[SPACE] DEPLOY PARACHUTE  •  [W/A/S/D] Air steer  •  [LMB DRAG] Look around'
+          : '[E] DROP / CUT CHUTE  •  [W] Glide  •  [A/D] Steer  •  [LMB DRAG] Look around');
         return;
       }
       if (engine.activeAircraft) {
@@ -7711,11 +7717,15 @@ export default function App() {
       if (event.repeat) return;
       const activeInputEngine = engineRef.current;
       if (activeInputEngine?.parachuteController) {
-        if (['KeyW','KeyA','KeyS','KeyD','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(event.code)) event.preventDefault();
+        if (['KeyE','KeyW','KeyA','KeyS','KeyD','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(event.code)) event.preventDefault();
         if (event.code === 'Space' && activeInputEngine.parachuteController.mode === 'freefall') {
           if (activeInputEngine.parachuteController.deploy()) {
             playSoundEffect('jump');
-            showTemporaryNotification('Parachute', 'Canopy deployed — W/↑ glide, A/D or ←/→ steer, S/↓ slows glide.');
+            showTemporaryNotification('Parachute', 'Canopy deployed — E drops back into freefall, SPACE can redeploy it again.');
+          }
+        } else if (event.code === 'KeyE' && activeInputEngine.parachuteController.mode === 'parachute') {
+          if (activeInputEngine.parachuteController.cutAway()) {
+            showTemporaryNotification('Parachute', 'Canopy cut — FREEFALL. Press SPACE whenever you want to redeploy.');
           }
         }
         // Freefall/parachute owns movement. Do not leak attack/special/switch keys
@@ -7781,11 +7791,14 @@ export default function App() {
       // player can genuinely look high into the sky. Seated and active Charizard
       // flight keep their established narrower orbit; their authored camera branches
       // are tuned separately and should not inherit the ground-skimming sky view.
+      const parachuteOrbit = !!engineRef.current.parachuteController;
       const wideSkyOrbit = !engineRef.current.seated && !(
         engineRef.current.currentPokemonId === 'charizard' && engineRef.current.charizardFlightActive
       );
-      const minPitch = wideSkyOrbit ? -1.48 : 0.10;
-      const maxPitch = wideSkyOrbit ? 1.02 : 0.85;
+      // Parachuting uses the same mouse-drag orbit as normal third person, but keep
+      // the camera from travelling excessively below the falling player.
+      const minPitch = parachuteOrbit ? -0.55 : wideSkyOrbit ? -1.48 : 0.10;
+      const maxPitch = parachuteOrbit ? 1.08 : wideSkyOrbit ? 1.02 : 0.85;
       engineRef.current.cameraPitch = THREE.MathUtils.clamp(
         engineRef.current.cameraPitch + dy * 0.003,
         minPitch,
@@ -9490,11 +9503,20 @@ export default function App() {
           400,
         );
         const parachuteAltitude = Math.max(0, e.playerMovement.position.y - parachuteGround);
-        const forward = new THREE.Vector3(Math.sin(parachute.yaw), 0, Math.cos(parachute.yaw));
+        // Keep parachute steering/yaw independent from camera yaw. Previously this
+        // branch forced cameraAngle back to parachute.yaw every frame, which meant
+        // mouse dragging technically changed the camera value but it was immediately
+        // overwritten and the view felt locked behind the player.
         const cameraDistance = parachute.mode === 'freefall' ? 7.2 : 9.2;
-        tempLookTarget.copy(e.playerMovement.position).add(new THREE.Vector3(0, 1.0, 0));
-        tempCameraTarget.copy(e.playerMovement.position).addScaledVector(forward, -cameraDistance);
-        tempCameraTarget.y += parachute.mode === 'freefall' ? 2.7 : 3.8;
+        const cameraPitch = THREE.MathUtils.clamp(e.cameraPitch, -0.55, 1.08);
+        const horizontalDistance = Math.cos(cameraPitch) * cameraDistance;
+        tempLookTarget.copy(e.playerMovement.position);
+        tempLookTarget.y += 1.0;
+        tempCameraTarget.set(
+          e.playerMovement.position.x - Math.sin(e.cameraAngle) * horizontalDistance,
+          tempLookTarget.y + Math.sin(cameraPitch) * cameraDistance,
+          e.playerMovement.position.z - Math.cos(e.cameraAngle) * horizontalDistance,
+        );
         const safeParachuteCam = e.collisionSystem.resolveCameraPosition(tempLookTarget, tempCameraTarget, 0.30, 0.20);
         camera.position.lerp(safeParachuteCam, Math.min(1, rawDt * (parachute.mode === 'freefall' ? 5.8 : 4.8)));
         camera.lookAt(tempLookTarget);
@@ -9503,7 +9525,6 @@ export default function App() {
           camera.fov = THREE.MathUtils.damp(camera.fov, parachuteFov, 5, dt);
           camera.updateProjectionMatrix();
         }
-        e.cameraAngle = parachute.yaw;
         e.worldInteractions.pushLightweightProps(e.playerMovement.position, e.playerMovement.velocity, dt);
 
         if (parachuteResult.landed) {

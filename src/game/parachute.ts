@@ -121,6 +121,20 @@ export class ParachuteController {
     return true;
   }
 
+  /**
+   * Cut the currently deployed canopy and return to freefall. The same packed
+   * canopy can be redeployed later with deploy(), which gives the player the
+   * arcade-style drop/redeploy loop without allocating another controller.
+   */
+  public cutAway(): boolean {
+    if (this.destroyed || this.mode !== 'parachute') return false;
+    this.mode = 'freefall';
+    this.deployment = 0;
+    this.canopy.visible = false;
+    this.canopy.scale.setScalar(0.08);
+    return true;
+  }
+
   public getVelocity(target = new THREE.Vector3()): THREE.Vector3 {
     return target.copy(this.velocity);
   }

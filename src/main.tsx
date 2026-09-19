@@ -96,7 +96,7 @@ function showFatalError(reason: unknown, source: string) {
   document.body.append(overlay);
 }
 
-function isBrowserExtensionError(reason: unknown, sourceUrl?: string) {
+function isIgnoredRuntimeError(reason: unknown, sourceUrl?: string) {
   const error = reason instanceof Error ? reason : null;
   const message = String(error?.message ?? reason ?? '');
   const stack = String(error?.stack ?? '');
@@ -118,12 +118,23 @@ function isBrowserExtensionError(reason: unknown, sourceUrl?: string) {
     /metamask/i.test(stack) ||
     /failed to connect to metamask/i.test(message);
 
-  return extensionOrigin || injectedWalletNoise;
+  // Vite HMR dev server WebSocket errors are expected when HMR is disabled in the
+  // sandboxed preview environment (DISABLE_HMR=true). These are benign and must
+  // never interrupt gameplay.
+  const viteHmrNoise =
+    /websocket/i.test(message) ||
+    /websocket/i.test(stack) ||
+    /vite/i.test(message) ||
+    /vite/i.test(stack) ||
+    source.includes('@vite/client') ||
+    stack.includes('@vite/client');
+
+  return extensionOrigin || injectedWalletNoise || viteHmrNoise;
 }
 
 window.addEventListener('error', (event) => {
-  if (isBrowserExtensionError(event.error ?? event.message, event.filename)) {
-    console.warn('[Pokémon Hit & Run] Ignored browser-extension error:', event.error ?? event.message);
+  if (isIgnoredRuntimeError(event.error ?? event.message, event.filename)) {
+    console.warn('[Pokémon Hit & Run] Ignored runtime error:', event.error ?? event.message);
     return;
   }
 
@@ -133,11 +144,10 @@ window.addEventListener('error', (event) => {
 });
 
 window.addEventListener('unhandledrejection', (event) => {
-  if (isBrowserExtensionError(event.reason)) {
-    // Prevent an unrelated extension rejection from being promoted to the game's
-    // full-screen fatal-error overlay.
+  if (isIgnoredRuntimeError(event.reason)) {
+    // Prevent benign Vite HMR or extension rejections from triggering the fatal error overlay
     event.preventDefault();
-    console.warn('[Pokémon Hit & Run] Ignored browser-extension promise rejection:', event.reason);
+    console.warn('[Pokémon Hit & Run] Ignored promise rejection:', event.reason);
     return;
   }
 

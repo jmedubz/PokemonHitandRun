@@ -41,7 +41,10 @@ export type VehicleModelType =
   | 'canyonero'
   | 'mr_plow'
   | 'car_built_for_homer'
-  | 'peppa_family_car';
+  | 'peppa_family_car'
+  | 'arcade_visitor_sports'
+  | 'arcade_visitor_convertible'
+  | 'arcade_visitor_suv';
 
 export interface Vehicle {
   id: string;
@@ -169,6 +172,13 @@ export interface DestructibleProp {
   respawnTimer?: number;
   isBurning?: boolean;
   burnTimer?: number;
+}
+
+export interface ArcadeMachineInfo {
+  id: string;
+  name: string;
+  position: THREE.Vector3;
+  gameId?: string;
 }
 
 export interface GrassPatch {

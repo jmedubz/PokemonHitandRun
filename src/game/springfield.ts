@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createMaterial, createSurfaceMaterial, createStableSidewalkMaterial, createGlassMaterial, createAshKetchumModel } from './models';
-import { DestructibleProp, GrassPatch, MapLandmark } from '../types';
+import { ArcadeMachineInfo, DestructibleProp, GrassPatch, MapLandmark } from '../types';
 import { Door, WallBox, markWalkableStairSurface, markStairRailing } from './doors';
 import { addRoadsideLandscaping } from './landscaping';
 import { createSimpsonsFamilyOnCouch } from './simpsonsFamily';
@@ -31,6 +31,7 @@ export interface SpringfieldBuildResult {
   tvLight: THREE.PointLight;
   cloudsGroup: THREE.Group;
   landmarks: MapLandmark[];
+  arcadeMachines?: ArcadeMachineInfo[];
 }
 
 function enableInteriorFaces(group: THREE.Object3D) {
@@ -114,6 +115,7 @@ export function buildSpringfield(): SpringfieldBuildResult {
   const destructibles: DestructibleProp[] = [];
   const grassPatches: GrassPatch[] = [];
   const landmarks: MapLandmark[] = [];
+  const arcadeMachines: ArcadeMachineInfo[] = [];
   const doors: Door[] = [];
   const wallColliders: WallBox[] = [];
 
@@ -2542,6 +2544,25 @@ export function buildSpringfield(): SpringfieldBuildResult {
   squishee.position.set(7.8, 1.05, -6.2);
   const squisheeTop = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 6), createMaterial(0x00bcd4));
   squisheeTop.position.set(7.8, 2.2, -6.2);
+
+  // Kwik-E-Mart Classic Coin-Op Arcade Cabinet
+  const kemArcadeCab = new THREE.Group();
+  kemArcadeCab.position.set(-7.5, 0, -4.5);
+  const kemCabBody = new THREE.Mesh(new THREE.BoxGeometry(1.35, 2.2, 0.95), createMaterial(0xbf360c));
+  kemCabBody.position.y = 1.1;
+  const kemCabScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.62), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+  kemCabScreen.position.set(0, 1.45, 0.486);
+  const kemMarquee = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.35, 0.28), new THREE.MeshBasicMaterial({ color: 0x76ff03 }));
+  kemMarquee.position.set(0, 2.25, 0.38);
+  kemArcadeCab.add(kemCabBody, kemCabScreen, kemMarquee);
+  markSolid(kemCabBody);
+  kwikGroup.add(kemArcadeCab);
+  arcadeMachines.push({
+    id: 'kwik_e_mart_arcade',
+    name: 'Kwik-E-Mart Arcade',
+    position: new THREE.Vector3(-210 - 7.5, 0.12, -130 - 4.5),
+  });
+
   markSolid(kemCounter, squishee);
   kwikGroup.add(kemCounter, register, squishee, squisheeTop);
 
@@ -2934,5 +2955,6 @@ export function buildSpringfield(): SpringfieldBuildResult {
     tvLight,
     cloudsGroup,
     landmarks,
+    arcadeMachines,
   };
 }

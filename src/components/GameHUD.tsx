@@ -47,12 +47,15 @@ import {
   RotateCcw,
   RefreshCw,
   Sparkles,
+  Gamepad2,
   MapPin,
   Layers,
   X,
   Navigation,
   Send,
   Search,
+  Pause,
+  Users,
 } from 'lucide-react';
 
 interface GameHUDProps {
@@ -118,6 +121,7 @@ interface GameHUDProps {
   policePositions: { x: number; z: number }[];
   isMuted: boolean;
   onToggleMute: () => void;
+  onEnterArcade?: () => void;
   onResetPlayer: () => void;
   onRestartWorld: () => void;
   onFastTravel: (target: { x: number; z: number; name?: string; travelX?: number; travelZ?: number; travelYaw?: number; mapClick?: boolean }) => void;
@@ -125,6 +129,12 @@ interface GameHUDProps {
   unlockedGeodude: boolean;
   treesGrownCount: number;
   worldGoal: WorldGoalView | null;
+  onTogglePause: () => void;
+  isPaused: boolean;
+  isMultiplayerActive?: boolean;
+  roomCode?: string | null;
+  playerCount?: number;
+  onOpenMultiplayer?: () => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -157,6 +167,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   policePositions,
   isMuted,
   onToggleMute,
+  onEnterArcade,
   onResetPlayer,
   onRestartWorld,
   onFastTravel,
@@ -164,6 +175,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   unlockedGeodude,
   treesGrownCount,
   worldGoal,
+  onTogglePause,
+  isPaused,
+  isMultiplayerActive,
+  roomCode,
+  playerCount,
+  onOpenMultiplayer,
 }) => {
   const [showBigMap, setShowBigMap] = useState(false);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
@@ -282,15 +299,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Tab') {
-        e.preventDefault();
-        setShowBigMap((prev) => !prev);
-      }
-      if (e.code === 'Escape' && showBigMap) {
-        setShowBigMap(false);
-      }
       const keyTarget = e.target as HTMLElement | null;
-      const isTypingIntoMapField = Boolean(
+      const isTyping = Boolean(
         keyTarget && (
           keyTarget.tagName === 'INPUT' ||
           keyTarget.tagName === 'TEXTAREA' ||
@@ -298,7 +308,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           keyTarget.isContentEditable
         ),
       );
-      if (e.code === 'KeyR' && showBigMap && !isTypingIntoMapField) {
+      if (isTyping) {
+        return;
+      }
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        setShowBigMap((prev) => !prev);
+      }
+      if (e.code === 'Escape' && showBigMap) {
+        setShowBigMap(false);
+      }
+      if (e.code === 'KeyR' && showBigMap) {
         e.preventDefault();
         e.stopPropagation();
         setFullMapViewCenter({ x: playerPos.x, z: playerPos.z });
@@ -765,6 +785,52 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {/* Quick Utility Buttons */}
         <div className="flex gap-2">
+          <button
+            id="btn-pause-game"
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
+              event.currentTarget.blur();
+              onTogglePause();
+            }}
+            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/80 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)] transition flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            title="Pause Game / Multiplayer Menu (ESC)"
+          >
+            <Pause className="w-4 h-4 text-amber-300" />
+            <span>PAUSE</span>
+          </button>
+          {isMultiplayerActive && (
+            <button
+              id="btn-hud-multiplayer"
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.currentTarget.blur();
+                onOpenMultiplayer?.();
+              }}
+              className="px-2.5 py-2 bg-indigo-950/90 hover:bg-indigo-900 border border-indigo-400/70 rounded-lg text-indigo-200 shadow-[0_0_12px_rgba(99,102,241,0.35)] transition flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+              title="Multiplayer Session (Click to view)"
+            >
+              <Users className="w-4 h-4 text-indigo-300" />
+              <span>{roomCode} ({playerCount})</span>
+            </button>
+          )}
+          {onEnterArcade && (
+            <button
+              id="btn-play-arcade"
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.currentTarget.blur();
+                onEnterArcade();
+              }}
+              className="px-2.5 py-2 bg-purple-950/90 hover:bg-purple-900 border border-purple-400/60 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(168,85,247,0.35)] transition flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+              title="Play Retro Arcade Game (Suspends Main World)"
+            >
+              <Gamepad2 className="w-4 h-4 text-amber-300" />
+              <span>Arcade</span>
+            </button>
+          )}
           <button
             id="btn-toggle-sound"
             onClick={onToggleMute}

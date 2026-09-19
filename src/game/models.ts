@@ -5824,6 +5824,83 @@ export function createGenericCitizenNPC(variant = 0): THREE.Group {
   return root;
 }
 
+export function createArcadePrizeHostNPC(): THREE.Group {
+  const root = new THREE.Group();
+  root.name = 'npc_arcade_prize_host';
+  const shirtMat = createMaterial(0xd946ef); // Magenta arcade uniform
+  const collarMat = createMaterial(0x38bdf8); // Cyan collar trim
+  const pantsMat = createMaterial(0x1e1b4b); // Dark navy slacks
+  const skinMat = createMaterial(0xf5d0b0); // Skin tone
+  const hairMat = createMaterial(0x3e2723); // Dark hair
+  const dark = createMaterial(0x18181b); // Shoes / pupils
+  const badgeMat = createMaterial(0xfacc15); // Golden badge
+  const visorMat = createMaterial(0x06b6d4, 0.4, 0.7); // Translucent retro cyan visor
+
+  // Torso & uniform
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.36, 0.95, 8), shirtMat);
+  body.position.y = 1.20;
+  root.add(body);
+
+  // Cyan collar trim & badge lanyard
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 8), collarMat);
+  collar.position.y = 1.62;
+  const lanyard = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.42, 0.04), badgeMat);
+  lanyard.position.set(0, 1.28, 0.32);
+  const badge = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.03), createMaterial(0xffffff));
+  badge.position.set(0, 1.06, 0.34);
+  root.add(collar, lanyard, badge);
+
+  // Head
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 9, 8), skinMat);
+  head.position.y = 1.92;
+  root.add(head);
+
+  // Hair
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
+  hair.position.y = 2.08;
+  root.add(hair);
+
+  // Visor (Neon retro arcade visor)
+  const visorBand = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 12, 1, true), shirtMat);
+  visorBand.position.y = 2.02;
+  const visorBrim = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.04, 0.28), visorMat);
+  visorBrim.position.set(0, 1.98, 0.30);
+  visorBrim.rotation.x = 0.15;
+  root.add(visorBand, visorBrim);
+
+  // Face & Limbs
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 5), createMaterial(0xffffff));
+    eye.position.set(side * 0.11, 1.95, 0.29);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.025, 5, 4), dark);
+    pupil.position.set(side * 0.11, 1.95, 0.337);
+    root.add(eye, pupil);
+
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.66, 6), shirtMat);
+    arm.name = side < 0 ? 'arm_left' : 'arm_right';
+    arm.position.set(side * 0.43, 1.23, 0.06);
+    arm.rotation.x = -0.25; // Friendly resting posture on desk
+    root.add(arm);
+
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.11, 0.70, 6), pantsMat);
+    leg.name = side < 0 ? 'leg_left' : 'leg_right';
+    leg.position.set(side * 0.16, 0.46, 0);
+    root.add(leg);
+
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.43), dark);
+    shoe.position.set(side * 0.16, 0.08, 0.09);
+    root.add(shoe);
+  }
+
+  // Smile
+  const smile = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.04), createMaterial(0xb91c1c));
+  smile.position.set(0, 1.80, 0.31);
+  root.add(smile);
+
+  root.userData.combatWeight = 0.95;
+  return root;
+}
+
 export function createBarneyNPC(): THREE.Group {
   const root = new THREE.Group();
   root.name = 'npc_barney';

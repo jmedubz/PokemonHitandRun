@@ -13,7 +13,9 @@ import {
   WorldGoalView,
   WorldProgressState,
   WorldMapSnapshot,
+  ArcadeMachineInfo,
 } from './types';
+import { ArcadeCabinet } from './components/ArcadeCabinet';
 import {
   createPokemonModel,
   createTrainerAvatarModel,
@@ -47,6 +49,7 @@ import { buildGoldenrodCity } from './game/goldenrod';
 import { buildSpringfield } from './game/springfield';
 import { buildConnectingHighway } from './game/highway';
 import { buildAirportDistrict, AirportAircraft } from './game/airport';
+import { buildArcadeBuilding, ArcadeBuildingResult } from './game/arcadeBuilding';
 import { AircraftController, NEUTRAL_AIRCRAFT_INPUTS } from './game/aircraft';
 import { ParachuteController } from './game/parachute';
 import { solveVehicleCollision, VehicleCollisionBody, VehicleCollisionResult } from './game/vehicleCollision';
@@ -55,6 +58,8 @@ import { OAK_LAB_NEW_GAME_START } from './game/spawnPoints';
 import { playSoundEffect, soundManager } from './game/audio';
 import { GameHUD } from './components/GameHUD';
 import { disposeTransientObject3D } from './game/dispose';
+import { MultiplayerManager, MultiplayerClientState } from './game/multiplayerManager';
+import { MultiplayerModal } from './components/MultiplayerModal';
 
 type VehicleHudInfo = {
   type: VehicleModelType;
@@ -185,6 +190,7 @@ type EngineState = {
   trafficManager: TrafficManager;
   worldInteractions: WorldInteractionManager;
   footballManager: FootballMatchManager;
+  arcadeBuilding: ArcadeBuildingResult;
   playerMesh: THREE.Group;
   playerMovement: PlayerMovement;
   currentPokemonId: PokemonCharacterId;
@@ -628,6 +634,26 @@ export default function App() {
   const [worldGoal, setWorldGoal] = useState<WorldGoalView | null>(null);
   const [showAshVictory, setShowAshVictory] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
+  const showMultiplayerModalRef = useRef(false);
+  useEffect(() => {
+    showMultiplayerModalRef.current = showMultiplayerModal;
+  }, [showMultiplayerModal]);
+  const handleFastTravelRef = useRef<(target: any) => void>(() => {});
+  const [mpState, setMpState] = useState<MultiplayerClientState>({
+    isConnected: false,
+    isConnecting: false,
+    isInRoom: false,
+    roomCode: null,
+    isHost: false,
+    localPlayerId: null,
+    localPlayerName: 'Trainer',
+    players: [],
+    playerCount: 1,
+    lastError: null,
+  });
+  const multiplayerRef = useRef<MultiplayerManager>(new MultiplayerManager());
+  const togglePauseRef = useRef<() => void>(() => {});
   const [developerDebugOpen, setDeveloperDebugOpen] = useState(false);
   const [debugSnapshot, setDebugSnapshot] = useState<DeveloperDebugSnapshot | null>(null);
   const [copySnapshotStatus, setCopySnapshotStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -638,6 +664,13 @@ export default function App() {
     allDefeated: false,
     battleLog: '',
   });
+
+  const [isArcadeActive, setIsArcadeActive] = useState(false);
+  const [activeArcadeMachine, setActiveArcadeMachine] = useState<ArcadeMachineInfo | null>(null);
+  const arcadeActiveRef = useRef(false);
+  const activeArcadeMachineRef = useRef<ArcadeMachineInfo | null>(null);
+  const enterArcadeModeRef = useRef<(machine?: ArcadeMachineInfo) => void>(() => {});
+  const exitArcadeModeRef = useRef<() => void>(() => {});
 
   const engineRef = useRef<EngineState | null>(null);
   const pauseRef = useRef(false);
@@ -823,6 +856,25 @@ export default function App() {
     scene.background = new THREE.Color(0x87ceeb);
     scene.fog = new THREE.FogExp2(0x87ceeb, 0.00165);
 
+    multiplayerRef.current.initScene(scene);
+    multiplayerRef.current.onStateChange = (state) => {
+      setMpState(state);
+    };
+    multiplayerRef.current.onNotification = (title, msg) => {
+      showTemporaryNotification(title, msg);
+    };
+    multiplayerRef.current.onHostDisconnected = () => {
+      handleResumeGame();
+    };
+    multiplayerRef.current.onSpawnJoiner = (pos) => {
+      handleFastTravelRef.current({
+        x: pos.x,
+        z: pos.z,
+        travelYaw: pos.yaw,
+        name: 'Session Spawn',
+      });
+    };
+
     const initialW = Math.max(mountRef.current.clientWidth || window.innerWidth || 800, 320);
     const initialH = Math.max(mountRef.current.clientHeight || window.innerHeight || 600, 240);
     const camera = new THREE.PerspectiveCamera(60, initialW / initialH, 0.35, 980);
@@ -988,7 +1040,14 @@ export default function App() {
     const springfield = buildSpringfield();
     const highway = buildConnectingHighway();
     const airport = buildAirportDistrict();
-    scene.add(goldenrod.group, springfield.group, highway.group, airport.group);
+    const arcadeBuilding = buildArcadeBuilding();
+    scene.add(goldenrod.group, springfield.group, highway.group, airport.group, arcadeBuilding.group);
+
+    const allArcadeMachines: ArcadeMachineInfo[] = [
+      ...(goldenrod.arcadeMachines ?? []),
+      ...(springfield.arcadeMachines ?? []),
+      ...(arcadeBuilding.arcadeMachines ?? []),
+    ];
     // Aircraft are dynamic world actors, not static airport scenery. Keep them as
     // direct scene children so their simulation/visibility is independent from the
     // airport's structural/detail rendering policy.
@@ -1278,6 +1337,7 @@ export default function App() {
     airport.aircraft.forEach((plane) => configureWorldRendering(plane.mesh));
     configureWorldRendering(goldenrod.trainService.serviceGroup);
     configureWorldRendering(footballManager.group);
+    configureWorldRendering(arcadeBuilding.group);
 
     // Keep the renderer's light topology FIXED. Three.js bakes the active light
     // counts into MeshStandardMaterial shader variants. Toggling authored local
@@ -1328,8 +1388,11 @@ export default function App() {
     // Swimmers may pass underneath bridges, while cars on the authored bridge decks
     // must remain legal. Keeping these predicates separate prevents either system
     // from borrowing the other's exception and ending up in the wrong medium.
+    const isArcadeCauseway = (position: THREE.Vector3) => (
+      Math.abs(position.x - 8) < 14 && position.z >= -265 && position.z <= -160
+    );
     const isRiverWaterColumn = (position: THREE.Vector3) => (
-      Math.abs(position.x) < 49 && position.z >= -228 && position.z <= 228
+      Math.abs(position.x) < 49 && position.z >= -228 && position.z <= 228 && !isArcadeCauseway(position)
     );
     const isOpenRiverWater = (position: THREE.Vector3) => {
       if (!isRiverWaterColumn(position)) return false;
@@ -1338,6 +1401,7 @@ export default function App() {
       if (Math.abs(position.z) < 12) return false;
       if (Math.abs(position.z + 170) < 11) return false;
       if (Math.abs(position.z - 150) < 12) return false;
+      if (isArcadeCauseway(position)) return false;
       return true;
     };
 
@@ -1371,6 +1435,7 @@ export default function App() {
 
     goldenrod.wallColliders.forEach((w) => collisionSystem.addWall(w));
     airport.wallColliders.forEach((w) => collisionSystem.addWall(w));
+    arcadeBuilding.wallColliders.forEach((w) => collisionSystem.addWall(w));
 
     // The original Springfield jail had one large collider several metres in front
     // of the visible bars. That created the 'invisible jail wall'. Skip that stale
@@ -1404,7 +1469,7 @@ export default function App() {
       maxY: 4.6,
     });
 
-    const allDoors = [...goldenrod.doors, ...springfield.doors, ...airport.doors, ...highway.doors];
+    const allDoors = [...goldenrod.doors, ...springfield.doors, ...airport.doors, ...highway.doors, ...arcadeBuilding.doors];
     allDoors.forEach((d) => collisionSystem.addDoor(d));
 
     // Critical repair: collision height is taken from the visible authored road/floor/deck.
@@ -1413,6 +1478,7 @@ export default function App() {
     collisionSystem.addWalkableRoot(springfield.group, 'springfield');
     collisionSystem.addWalkableRoot(highway.group, 'highway');
     collisionSystem.addWalkableRoot(airport.group, 'airport');
+    collisionSystem.addWalkableRoot(arcadeBuilding.group, 'arcade_building');
     collisionSystem.addWalkableRoot(goldenrod.trainService.serviceGroup, 'magnet_train_route');
     collisionSystem.addWalkableRoot(footballManager.group, 'springfield_football_pitch');
 
@@ -1424,6 +1490,7 @@ export default function App() {
     collisionSystem.addLandableRoofsFromRoot(springfield.group, 'springfield_roof');
     collisionSystem.addLandableRoofsFromRoot(highway.group, 'highway_roof');
     collisionSystem.addLandableRoofsFromRoot(airport.group, 'airport_roof');
+    collisionSystem.addLandableRoofsFromRoot(arcadeBuilding.group, 'arcade_building_roof');
 
     // Dynamic/kickable scenery must never be captured by the static-world pass.
     // Some legacy prop meshes also carry `solidCollider` tags from before the
@@ -1441,7 +1508,7 @@ export default function App() {
       });
       return permanent;
     };
-    const rawInteractiveProps = [...goldenrod.destructibles, ...springfield.destructibles, ...highway.destructibles, ...airport.destructibles];
+    const rawInteractiveProps = [...goldenrod.destructibles, ...springfield.destructibles, ...highway.destructibles, ...airport.destructibles, ...arcadeBuilding.destructibles];
     const collisionInteractiveProps = rawInteractiveProps.filter((prop) => !isPermanentRoadHierarchy(prop.mesh));
     const rejectedRoadProps = rawInteractiveProps.length - collisionInteractiveProps.length;
     if (rejectedRoadProps > 0) console.warn(`[Road audit] ignored ${rejectedRoadProps} road meshes incorrectly registered as destructibles`);
@@ -1456,6 +1523,7 @@ export default function App() {
     collisionSystem.addSolidRoot(springfield.group, 'springfield_visible_wall');
     collisionSystem.addSolidRoot(highway.group, 'highway_visible_wall');
     collisionSystem.addSolidRoot(airport.group, 'airport_visible_wall');
+    collisionSystem.addSolidRoot(arcadeBuilding.group, 'arcade_building_visible_wall');
     collisionSystem.addSolidRoot(goldenrod.trainService.serviceGroup, 'magnet_train_route_wall');
     collisionSystem.addSolidRoot(footballManager.group, 'springfield_football_pitch_wall');
 
@@ -1725,10 +1793,10 @@ export default function App() {
       travelZ: soccerTravelZ,
       travelYaw: soccerTravelYaw,
     };
-    const allLandmarks = [...goldenrod.landmarks, ...springfield.landmarks, ...highway.landmarks, ...airport.landmarks, soccerFieldLandmark];
+    const allLandmarks = [...goldenrod.landmarks, ...springfield.landmarks, ...highway.landmarks, ...airport.landmarks, ...arcadeBuilding.landmarks, soccerFieldLandmark];
     setLandmarks(allLandmarks);
     setWorldMap(buildWorldMapSnapshot(
-      [goldenrod.group, springfield.group, highway.group, airport.group, goldenrod.trainService.serviceGroup, footballManager.group],
+      [goldenrod.group, springfield.group, highway.group, airport.group, arcadeBuilding.group, goldenrod.trainService.serviceGroup, footballManager.group],
       allLandmarks
     ));
 
@@ -3124,6 +3192,7 @@ export default function App() {
       trafficManager,
       worldInteractions,
       footballManager,
+      arcadeBuilding,
       playerMesh,
       playerMovement,
       currentPokemonId: loadedSave.currentPokemon,
@@ -4786,6 +4855,9 @@ export default function App() {
       e.vehicleEntryActive = false;
       e.pendingVehicle = null;
       vehicle.mesh.rotation.z = 0;
+      if (multiplayerRef.current.state.isInRoom) {
+        multiplayerRef.current.claimVehicle(vehicle.id);
+      }
       setInVehicle(true);
       setCurrentVehicleInfo({
         type: vehicle.type ?? 'civilian_sedan',
@@ -4805,6 +4877,13 @@ export default function App() {
     const enterVehicle = (vehicle: Vehicle) => {
       const e = engineRef.current;
       if (!e || e.activeVehicle || e.vehicleEntryActive || !e.hasChosenStarter) return;
+      if (multiplayerRef.current.state.isInRoom) {
+        const check = multiplayerRef.current.canEnterVehicle(vehicle.id);
+        if (!check.allowed) {
+          showTemporaryNotification('Occupied', check.reason || 'This vehicle is being driven by another player.');
+          return;
+        }
+      }
       // If the player catches a recently abandoned rolling car, hand it back to the
       // normal entry flow and stop its background coast controller immediately.
       e.coastingVehicles = e.coastingVehicles.filter((entry) => entry.vehicle !== vehicle);
@@ -4990,6 +5069,9 @@ export default function App() {
       e.playerMesh.visible = true;
       e.activeVehicle = null;
       e.activeCarPhysics = null;
+      if (multiplayerRef.current.state.isInRoom) {
+        multiplayerRef.current.releaseVehicle(exitingVehicle.id);
+      }
       setInVehicle(false);
       setCurrentVehicleInfo(null);
       soundManager.stopEngine();
@@ -5050,6 +5132,14 @@ export default function App() {
     const enterAircraft = (plane: AirportAircraft) => {
       const e = engineRef.current;
       if (!e || !e.hasChosenStarter || e.activeAircraft || e.activeVehicle || plane.inUse) return;
+      if (multiplayerRef.current.state.isInRoom) {
+        const check = multiplayerRef.current.canEnterAircraft(plane.id);
+        if (!check.allowed) {
+          showTemporaryNotification('Occupied', check.reason || 'This aircraft is being piloted by another player.');
+          return;
+        }
+        multiplayerRef.current.claimAircraft(plane.id);
+      }
       if (plane.crashed || plane.damage >= 100) {
         showTemporaryNotification(plane.name, 'This aircraft is disabled after a crash. Try another plane.');
         return;
@@ -5103,6 +5193,9 @@ export default function App() {
         inheritedVelocity.y = Math.min(inheritedVelocity.y - 2.4, -1.6);
 
         plane.inUse = false;
+        if (multiplayerRef.current.state.isInRoom) {
+          multiplayerRef.current.releaseAircraft(plane.id);
+        }
         e.freeAircraftControllers.set(plane.id, controller);
         e.activeAircraft = null;
         e.aircraftController = null;
@@ -5667,6 +5760,14 @@ export default function App() {
       }
       const pos = e.playerMovement.position;
 
+      // Check Arcade Machine interaction
+      for (const machine of allArcadeMachines) {
+        if (pos.distanceTo(machine.position) < 3.2) {
+          enterArcadeModeRef.current(machine);
+          return;
+        }
+      }
+
       if (e.hasChosenStarter) {
         const nearbyPlane = getNearbyAircraft(pos);
         if (nearbyPlane) {
@@ -6175,6 +6276,14 @@ export default function App() {
       if (engine.activeVehicle) {
         setInteractionPrompt('[H] Horn  •  [E] Exit Vehicle');
         return;
+      }
+
+      // Check Arcade Machine proximity
+      for (const machine of allArcadeMachines) {
+        if (pos.distanceTo(machine.position) < 3.2) {
+          setInteractionPrompt(`[E] Play ${machine.name}  •  Insert Coin`);
+          return;
+        }
       }
       const footballPrompt = engine.footballManager.getInteractionPrompt(pos);
       if (footballPrompt) {
@@ -7677,8 +7786,51 @@ export default function App() {
     engine.keys = keys;
     let mouseDown = false;
 
+    const togglePause = () => {
+      if (starterSelectionCandidateRef.current) return;
+      if (showMultiplayerModalRef.current) {
+        setShowMultiplayerModal(false);
+        return;
+      }
+      if (developerDebugOpenRef.current) {
+        developerDebugOpenRef.current = false;
+        setDeveloperDebugOpen(false);
+        return;
+      }
+      const nextPaused = !pauseRef.current;
+      pauseRef.current = nextPaused;
+      setIsPaused(nextPaused);
+      if (!nextPaused) {
+        developerDebugOpenRef.current = false;
+        setDeveloperDebugOpen(false);
+      } else {
+        soundManager.stopEngine();
+        soundManager.setSiren(false);
+      }
+      clearHeldInputs();
+    };
+    togglePauseRef.current = togglePause;
+
     const onKeyDown = (event: KeyboardEvent) => {
       soundManager.unlock();
+      const target = event.target as HTMLElement | null;
+      const isInput = Boolean(
+        target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable
+        )
+      );
+      if (isInput) {
+        if (event.code === 'Escape') {
+          target?.blur();
+          if (showMultiplayerModalRef.current) {
+            setShowMultiplayerModal(false);
+          }
+        }
+        return;
+      }
       if (starterSelectionCandidateRef.current) {
         event.preventDefault();
         if (!event.repeat && event.code === 'Enter') confirmStarterSelectionRef.current();
@@ -7690,27 +7842,13 @@ export default function App() {
       }
       if (!event.repeat && event.code === 'Escape') {
         event.preventDefault();
-        if (developerDebugOpenRef.current) {
-          developerDebugOpenRef.current = false;
-          setDeveloperDebugOpen(false);
-          return;
-        }
-        const nextPaused = !pauseRef.current;
-        pauseRef.current = nextPaused;
-        setIsPaused(nextPaused);
-        if (!nextPaused) {
-          developerDebugOpenRef.current = false;
-          setDeveloperDebugOpen(false);
-        } else {
-          soundManager.stopEngine();
-          soundManager.setSiren(false);
-        }
-        for (const code of Object.keys(keys)) keys[code] = false;
-        mouseDown = false;
+        togglePause();
+        return;
+      }
+      if (arcadeActiveRef.current) {
         return;
       }
       if (pauseRef.current) {
-        event.preventDefault();
         return;
       }
       keys[event.code] = true;
@@ -7760,6 +7898,18 @@ export default function App() {
       }
     };
     const onKeyUp = (event: KeyboardEvent) => {
+      if (arcadeActiveRef.current) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable
+        )
+      ) {
+        return;
+      }
       keys[event.code] = false;
     };
 
@@ -7767,13 +7917,14 @@ export default function App() {
     let lastMouseY = 0;
     const onMouseDown = (event: MouseEvent) => {
       soundManager.unlock();
-      if (pauseRef.current || event.button !== 0) return;
+      if (arcadeActiveRef.current || pauseRef.current || event.button !== 0) return;
       mouseDown = true;
       lastMouseX = event.clientX;
       lastMouseY = event.clientY;
     };
     const onMouseMove = (event: MouseEvent) => {
       if (
+        arcadeActiveRef.current ||
         !mouseDown ||
         pauseRef.current ||
         !engineRef.current ||
@@ -7811,7 +7962,7 @@ export default function App() {
 
     const onWheel = (event: WheelEvent) => {
       const e = engineRef.current;
-      if (pauseRef.current || !e || e.activeVehicle || e.activeAircraft || e.elevatorRideActive || e.deathSequenceActive || e.hospitalRecoveryActive) return;
+      if (arcadeActiveRef.current || pauseRef.current || !e || e.activeVehicle || e.activeAircraft || e.elevatorRideActive || e.deathSequenceActive || e.hospitalRecoveryActive) return;
       event.preventDefault();
       // Trackpad/mouse-wheel zoom keeps the existing close view but now allows a
       // genuinely wide third-person view outdoors. Indoor collision will
@@ -7827,6 +7978,62 @@ export default function App() {
       for (const code of Object.keys(keys)) keys[code] = false;
       mouseDown = false;
     };
+
+    const enterArcadeMode = (machine?: ArcadeMachineInfo) => {
+      if (multiplayerRef.current.state.isInRoom) {
+        showTemporaryNotification('Arcade Restricted', 'Arcade minigames are disabled during active multiplayer sessions.');
+        return;
+      }
+      const e = engineRef.current;
+      const pos = e ? e.playerMovement.position.clone() : new THREE.Vector3();
+      const targetMachine: ArcadeMachineInfo = machine ?? {
+        id: 'arcade_quick_launch',
+        name: 'Retro Hit & Run 8-Bit',
+        position: pos,
+        gameId: 'retro_hit_and_run',
+      };
+
+      clearHeldInputs();
+      soundManager.stopEngine();
+      soundManager.setSiren(false);
+      soundManager.stopMusic();
+      soundManager.stopFountainAmbience();
+
+      // Smooth camera transition toward machine cabinet screen
+      if (e && machine) {
+        e.cameraTargetDistance = 1.8;
+        e.cameraPitch = 0.12;
+      }
+
+      setTimeout(() => {
+        arcadeActiveRef.current = true;
+        activeArcadeMachineRef.current = targetMachine;
+        setActiveArcadeMachine(targetMachine);
+        setIsArcadeActive(true);
+      }, machine ? 200 : 0);
+    };
+
+    const exitArcadeMode = () => {
+      arcadeActiveRef.current = false;
+      activeArcadeMachineRef.current = null;
+      setActiveArcadeMachine(null);
+      setIsArcadeActive(false);
+
+      const e = engineRef.current;
+      if (e) {
+        e.cameraTargetDistance = 6.5;
+        e.cameraPitch = 0.35;
+      }
+
+      lastTime = performance.now();
+      fpsWindowStart = performance.now();
+      fpsFrames = 0;
+
+      clearHeldInputs();
+    };
+
+    enterArcadeModeRef.current = enterArcadeMode;
+    exitArcadeModeRef.current = exitArcadeMode;
     const onVisibilityChange = () => {
       if (document.hidden) clearHeldInputs();
     };
@@ -8331,15 +8538,26 @@ export default function App() {
       }
       const e = engineRef.current;
       if (!e) return;
-      if (pauseRef.current) {
-        // Freeze gameplay/simulation time completely while paused. Keep requestAnimationFrame
-        // alive for the React menu/debug UI, but reset frame/FPS windows so unpausing
-        // cannot produce one giant catch-up delta or falsely trigger performance mode.
+      if (arcadeActiveRef.current) {
+        // Freeze gameplay/simulation time completely while arcade game is active.
         lastTime = time;
         fpsWindowStart = time;
         fpsFrames = 0;
-        publishDeveloperDebug(time, frameMs, true);
         return;
+      }
+      if (pauseRef.current) {
+        if (!multiplayerRef.current.state.isInRoom) {
+          // Freeze gameplay/simulation time completely while paused in single player. Keep requestAnimationFrame
+          // alive for the React menu/debug UI, but reset frame/FPS windows so unpausing
+          // cannot produce one giant catch-up delta or falsely trigger performance mode.
+          lastTime = time;
+          fpsWindowStart = time;
+          fpsFrames = 0;
+          publishDeveloperDebug(time, frameMs, true);
+          return;
+        }
+        // In multiplayer: do not freeze the simulation! World, physics, traffic, other players,
+        // and rendering continue, while local player controls remain paused.
       }
       lastActiveFrameMs = frameMs;
       // GTA-style knockout sequence runs the world in brief slow motion while the
@@ -8916,6 +9134,7 @@ export default function App() {
       framePhaseStarted = performance.now();
 
       const movementLocked =
+        pauseRef.current ||
         e.switchAnimator.active ||
         e.healingActive ||
         e.vehicleEntryActive ||
@@ -10628,6 +10847,8 @@ export default function App() {
           breakdown[key] += performance.now() - started;
         };
 
+        e.arcadeBuilding.update(simDt);
+
         measureWorld('football', () => e.footballManager.update(simDt, {
           playerPosition: e.playerMovement.position,
           playerForward: currentForward(),
@@ -10952,6 +11173,30 @@ export default function App() {
 
       // Keep the atmospheric dome centred on the active camera so it never clips at
       // the outer edges of the playable world, even on the shorter performance far plane.
+      if (multiplayerRef.current.state.isInRoom) {
+        multiplayerRef.current.update(
+          dt,
+          {
+            position: e.playerMovement.position,
+            yaw: e.playerMovement.yaw,
+            animState: e.playerMovement.animState,
+            isSprinting: e.playerMovement.isSprinting,
+            isJumping: !e.playerMovement.isGrounded,
+            characterId: selectedPokemonRef.current,
+            inVehicle: !!e.activeVehicle,
+            vehicleId: e.activeVehicle?.id || null,
+            inAircraft: !!e.activeAircraft,
+            aircraftId: e.activeAircraft?.id || null,
+            hp: hpRef.current,
+            activeVehicle: e.activeVehicle,
+            activeAircraft: e.activeAircraft,
+          },
+          camera,
+          e.vehicles,
+          e.airportAircraft
+        );
+      }
+
       skyDome.position.copy(camera.position);
       // Spread first-use GPU uploads over healthy frames instead of allowing a new
       // district to upload hundreds of buffers in one 300-1200 ms hitch. Never warm
@@ -11109,6 +11354,7 @@ export default function App() {
       renderer.renderLists.dispose();
       gpuWarmupTarget.dispose();
       renderer.dispose();
+      multiplayerRef.current.destroy();
       footballManager.dispose();
       engineRef.current = null;
     };
@@ -11224,6 +11470,7 @@ export default function App() {
     /** True for a raw click on the TAB map rather than a named POI. */
     mapClick?: boolean;
   }) => {
+    handleFastTravelRef.current = handleFastTravel;
     // Fast-travel controls are clickable HTML elements. Browsers keep a clicked
     // button focused, and Space activates the focused button again on key-up.
     // That used to make a normal jump tap immediately re-fire fast travel and
@@ -11462,6 +11709,7 @@ export default function App() {
 
     playSoundEffect('fanfare');
   };
+  handleFastTravelRef.current = handleFastTravel;
 
   const handleToggleMute = () => {
     const muted = soundManager.toggleMute();
@@ -11472,7 +11720,39 @@ export default function App() {
     pauseRef.current = false;
     developerDebugOpenRef.current = false;
     setDeveloperDebugOpen(false);
+    setShowMultiplayerModal(false);
     setIsPaused(false);
+  };
+
+  const handleTogglePause = () => {
+    togglePauseRef.current();
+  };
+
+  const handleCreateMultiplayerRoom = (playerName: string) => {
+    const e = engineRef.current;
+    const initialPos = {
+      x: e?.playerMovement.position.x ?? 200,
+      y: e?.playerMovement.position.y ?? 0.5,
+      z: e?.playerMovement.position.z ?? -174,
+      yaw: e?.playerMovement.yaw ?? 0,
+    };
+    multiplayerRef.current.createRoom(playerName, selectedPokemonRef.current, initialPos);
+  };
+
+  const handleJoinMultiplayerRoom = (code: string, playerName: string) => {
+    const e = engineRef.current;
+    const initialPos = {
+      x: e?.playerMovement.position.x ?? 200,
+      y: e?.playerMovement.position.y ?? 0.5,
+      z: e?.playerMovement.position.z ?? -174,
+      yaw: e?.playerMovement.yaw ?? 0,
+    };
+    multiplayerRef.current.joinRoom(code, playerName, selectedPokemonRef.current, initialPos);
+  };
+
+  const handleLeaveMultiplayerRoom = () => {
+    multiplayerRef.current.leaveRoom();
+    setShowMultiplayerModal(false);
   };
 
   const handleToggleDeveloperDebug = () => {
@@ -11549,7 +11829,10 @@ export default function App() {
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-slate-950">
-      <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
+      <div
+        ref={mountRef}
+        className={`w-full h-full cursor-grab active:cursor-grabbing ${isArcadeActive ? 'hidden pointer-events-none' : ''}`}
+      />
 
       {deathPresentation !== 'none' && (
         <div
@@ -11584,83 +11867,146 @@ export default function App() {
         </div>
       )}
 
-      <GameHUD
-        currentPokemon={{
-          id: selectedPokemonId,
-          name: hasChosenStarter ? pokemonName(selectedPokemonId) : 'Choose a Starter',
-          level: 25,
-          hp: pokemonHp,
-          maxHp: 100,
-          waterLevel: pokemonWater,
-        }}
-        hasChosenStarter={hasChosenStarter}
-        inVehicle={inVehicle}
-        currentVehicle={currentVehicleInfo}
-        aircraft={aircraftHud}
-        parachute={parachuteHud}
-        wantedHeat={wantedHeat}
-        hitAndRunActive={hitAndRunActive}
-        hitAndRunWarning={hitAndRunWarning}
-        fps={fps}
-        isBusted={isBusted}
-        interactionPrompt={interactionPrompt}
-        activeDialogue={activeDialogue}
-        onDismissDialogue={dismissActiveDialogue}
-        starterSelectionCandidate={starterSelectionCandidate}
-        onConfirmStarterSelection={() => confirmStarterSelectionRef.current()}
-        onCancelStarterSelection={() => {
-          starterSelectionCandidateRef.current = null;
-          setStarterSelectionCandidate(null);
-        }}
-        temporaryNotification={temporaryNotification}
-        onDismissTemporaryNotification={dismissTemporaryNotification}
-        ashBattleState={ashBattleState}
-        showAshVictory={showAshVictory}
-        onDismissAshVictory={dismissAshVictory}
-        playerPos={playerPos}
-        playerYaw={playerYaw}
-        landmarks={landmarks}
-        worldMap={worldMap}
-        policePositions={policePositions}
-        isMuted={isMuted}
-        onToggleMute={handleToggleMute}
-        onResetPlayer={handleResetPlayer}
-        onRestartWorld={handleRestartWorld}
-        onFastTravel={handleFastTravel}
-        onSelectStarter={switchStarterPokemon}
-        unlockedGeodude={unlockedGeodude}
-        treesGrownCount={treesGrownCount}
-        worldGoal={worldGoal}
-      />
+      {!isArcadeActive && (
+        <GameHUD
+          currentPokemon={{
+            id: selectedPokemonId,
+            name: hasChosenStarter ? pokemonName(selectedPokemonId) : 'Choose a Starter',
+            level: 25,
+            hp: pokemonHp,
+            maxHp: 100,
+            waterLevel: pokemonWater,
+          }}
+          hasChosenStarter={hasChosenStarter}
+          inVehicle={inVehicle}
+          currentVehicle={currentVehicleInfo}
+          aircraft={aircraftHud}
+          parachute={parachuteHud}
+          wantedHeat={wantedHeat}
+          hitAndRunActive={hitAndRunActive}
+          hitAndRunWarning={hitAndRunWarning}
+          fps={fps}
+          isBusted={isBusted}
+          interactionPrompt={interactionPrompt}
+          activeDialogue={activeDialogue}
+          onDismissDialogue={dismissActiveDialogue}
+          starterSelectionCandidate={starterSelectionCandidate}
+          onConfirmStarterSelection={() => confirmStarterSelectionRef.current()}
+          onCancelStarterSelection={() => {
+            starterSelectionCandidateRef.current = null;
+            setStarterSelectionCandidate(null);
+          }}
+          temporaryNotification={temporaryNotification}
+          onDismissTemporaryNotification={dismissTemporaryNotification}
+          ashBattleState={ashBattleState}
+          showAshVictory={showAshVictory}
+          onDismissAshVictory={dismissAshVictory}
+          playerPos={playerPos}
+          playerYaw={playerYaw}
+          landmarks={landmarks}
+          worldMap={worldMap}
+          policePositions={policePositions}
+          isMuted={isMuted}
+          onToggleMute={handleToggleMute}
+          onEnterArcade={() => enterArcadeModeRef.current()}
+          onResetPlayer={handleResetPlayer}
+          onRestartWorld={handleRestartWorld}
+          onFastTravel={handleFastTravel}
+          onSelectStarter={switchStarterPokemon}
+          unlockedGeodude={unlockedGeodude}
+          treesGrownCount={treesGrownCount}
+          worldGoal={worldGoal}
+          onTogglePause={handleTogglePause}
+          isPaused={isPaused}
+          isMultiplayerActive={mpState.isInRoom}
+          roomCode={mpState.roomCode}
+          playerCount={mpState.playerCount}
+          onOpenMultiplayer={() => setShowMultiplayerModal(true)}
+        />
+      )}
+
+      {isArcadeActive && (
+        <ArcadeCabinet
+          onExit={() => exitArcadeModeRef.current()}
+          machineName={activeArcadeMachine?.name ?? 'Retro Hit & Run 8-Bit'}
+          gameId={activeArcadeMachine?.gameId}
+        />
+      )}
 
       {isPaused && (
         <div className="absolute inset-0 z-[220] flex items-center justify-center bg-slate-950/72 p-4 backdrop-blur-md pointer-events-auto select-none">
           {!developerDebugOpen ? (
             <div className="w-[min(520px,calc(100vw-2rem))] rounded-3xl border-2 border-amber-400/80 bg-slate-950/95 p-6 text-white shadow-[0_0_55px_rgba(245,158,11,0.22)]">
               <div className="text-center">
-                <div className="text-xs font-black uppercase tracking-[0.32em] text-amber-300">Game Paused</div>
+                <div className="text-xs font-black uppercase tracking-[0.32em] text-amber-300">
+                  {mpState.isInRoom ? 'Multiplayer Session Active' : 'Game Paused'}
+                </div>
                 <div className="mt-2 text-4xl font-black tracking-tight">PAUSE</div>
-                <div className="mt-2 text-sm text-slate-400">Gameplay, physics, AI and world simulation are frozen.</div>
+                <div className="mt-2 text-sm text-slate-400">
+                  {mpState.isInRoom
+                    ? 'Your local controls are paused. Other players and the shared world continue live.'
+                    : 'Gameplay, physics, AI and world simulation are frozen.'}
+                </div>
               </div>
               <div className="mt-6 grid gap-3">
                 <button
                   type="button"
                   onClick={handleResumeGame}
-                  className="rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-5 py-4 text-left transition hover:bg-emerald-500/25"
+                  className="rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-5 py-4 text-left transition hover:bg-emerald-500/25 cursor-pointer"
                 >
                   <div className="font-black text-emerald-200">Resume Game</div>
                   <div className="mt-1 text-xs text-slate-400">Continue exactly where you paused.</div>
                 </button>
+
+                <button
+                  type="button"
+                  id="btn-pause-multiplayer"
+                  onClick={() => setShowMultiplayerModal(true)}
+                  className="rounded-2xl border border-indigo-400/60 bg-indigo-500/15 px-5 py-4 text-left transition hover:bg-indigo-500/25 cursor-pointer"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="font-black text-indigo-200">👥 Multiplayer (Host / Join)</div>
+                    {mpState.isInRoom && (
+                      <span className="rounded bg-indigo-500/40 px-2 py-0.5 text-xs font-black text-amber-300">
+                        Room {mpState.roomCode} ({mpState.playerCount})
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {mpState.isInRoom
+                      ? 'Connected to session. View players, share code, or leave.'
+                      : 'Host or join an online session in the full game world.'}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (mpState.isInRoom) {
+                      showTemporaryNotification('Arcade Restricted', 'Arcade minigames are disabled during active multiplayer sessions.');
+                      return;
+                    }
+                    handleResumeGame();
+                    enterArcadeModeRef.current();
+                  }}
+                  className={`rounded-2xl border border-purple-400/60 bg-purple-500/15 px-5 py-4 text-left transition hover:bg-purple-500/25 cursor-pointer ${mpState.isInRoom ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <div className="font-black text-purple-200">🎮 Play Arcade Machine (Coin-Op)</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {mpState.isInRoom ? 'Disabled during multiplayer to protect shared world state.' : 'Suspend main world and play the retro arcade machine.'}
+                  </div>
+                </button>
+
                 <button
                   type="button"
                   onClick={handleToggleDeveloperDebug}
-                  className="rounded-2xl border border-cyan-400/60 bg-cyan-500/10 px-5 py-4 text-left transition hover:bg-cyan-500/20"
+                  className="rounded-2xl border border-cyan-400/60 bg-cyan-500/10 px-5 py-4 text-left transition hover:bg-cyan-500/20 cursor-pointer"
                 >
                   <div className="font-black text-cyan-200">Developer / Performance Debug</div>
                   <div className="mt-1 text-xs text-slate-400">Inspect camera, world visibility, renderer, physics, memory and recent stalls.</div>
                 </button>
               </div>
-              <div className="mt-5 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ESC to resume</div>
+              <div className="mt-5 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ESC or Pause button to resume</div>
             </div>
           ) : (
             <div className="flex max-h-[92vh] w-[min(1050px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border-2 border-cyan-400/70 bg-slate-950/95 text-white shadow-[0_0_60px_rgba(34,211,238,0.20)]">
@@ -11817,6 +12163,17 @@ export default function App() {
             </div>
           )}
         </div>
+      )}
+
+      {showMultiplayerModal && (
+        <MultiplayerModal
+          mpState={mpState}
+          defaultPlayerName={pokemonName(selectedPokemonId)}
+          onClose={() => setShowMultiplayerModal(false)}
+          onCreateRoom={handleCreateMultiplayerRoom}
+          onJoinRoom={handleJoinMultiplayerRoom}
+          onLeaveRoom={handleLeaveMultiplayerRoom}
+        />
       )}
     </div>
   );

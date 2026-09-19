@@ -23,7 +23,458 @@ export interface ArcadeBuildingResult {
 }
 
 /**
- * Creates a canvas texture for signs, posters, and marquee displays.
+ * Draws a rounded rectangle path on a 2D canvas context.
+ */
+function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.arcTo(x + w, y, x + w, y + radius, radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
+  ctx.lineTo(x + radius, y + h);
+  ctx.arcTo(x, y + h, x, y + h - radius, radius);
+  ctx.lineTo(x, y + radius);
+  ctx.arcTo(x, y, x + radius, y, radius);
+  ctx.closePath();
+}
+
+/**
+ * Draws a cartoon 4-point or 8-point sparkle star in Simpsons/Pokemon comic style.
+ */
+function drawComicStar(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  outerR: number,
+  innerR: number,
+  fillColor = '#ffe600',
+  strokeColor = '#000000',
+  strokeWidth = 4
+) {
+  ctx.save();
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * Math.PI) / 4 - Math.PI / 2;
+    const r = i % 2 === 0 ? outerR : innerR;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.lineWidth = strokeWidth;
+  ctx.strokeStyle = strokeColor;
+  ctx.stroke();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  // White center sparkle glint
+  ctx.beginPath();
+  ctx.arc(cx - innerR * 0.2, cy - innerR * 0.2, Math.max(2, innerR * 0.35), 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Creates a plane geometry oriented with unmirrored UVs whether facing +Z or -Z.
+ */
+function createOrientedSignPlane(width: number, height: number, facingDir: 'posZ' | 'negZ'): THREE.PlaneGeometry {
+  const geom = new THREE.PlaneGeometry(width, height);
+  if (facingDir === 'negZ') {
+    geom.rotateY(Math.PI);
+  }
+  return geom;
+}
+
+/**
+ * Generates an authentic, high-contrast, crystal-clear arcade neon marquee sign
+ * designed in the iconic "Simpsons: Hit & Run" and "Pokémon Game Corner" cartoon aesthetic.
+ *
+ * Features:
+ * - 2048px ultra-high resolution canvas (eliminates 3D blur)
+ * - Simpsons Canary Yellow typography with 3D cartoon block extrusion
+ * - Heavy black comic outlines (never blends into background)
+ * - Donut-Pink & Electric-Cyan neon marquee badge framing
+ * - Animated/vibrant arcade chaser bulbs along outer border
+ * - Comic starburst sparkles and crystal-clear subtitle plaque
+ */
+function createSimpsonsPokemonArcadeSignTexture(
+  mode: 'wide_marquee' | 'monument_billboard'
+): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  const isWide = mode === 'wide_marquee';
+  canvas.width = 2048;
+  canvas.height = isWide ? 410 : 1024;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    const w = canvas.width;
+    const h = canvas.height;
+
+    // 1. Comic Deep Midnight Indigo Background with Radiant Contrast
+    const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, w * 0.65);
+    bgGrad.addColorStop(0, '#280843');
+    bgGrad.addColorStop(0.5, '#120222');
+    bgGrad.addColorStop(1, '#060010');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle retro arcade checker / halftone dot pattern
+    ctx.fillStyle = 'rgba(255, 0, 128, 0.06)';
+    const step = isWide ? 24 : 28;
+    for (let x = 0; x < w; x += step) {
+      for (let y = 0; y < h; y += step) {
+        if ((Math.floor(x / step) + Math.floor(y / step)) % 2 === 0) {
+          ctx.fillRect(x, y, step * 0.65, step * 0.65);
+        }
+      }
+    }
+
+    // 2. Thick Cartoon Double Outer Frame (Simpsons & Pokemon Arcade Style)
+    // Heavy black rim
+    ctx.lineWidth = isWide ? 14 : 16;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeRect(8, 8, w - 16, h - 16);
+
+    // Hot Donut Pink / Magenta Neon Frame
+    ctx.lineWidth = isWide ? 7 : 8;
+    ctx.strokeStyle = '#ff007f';
+    ctx.strokeRect(16, 16, w - 32, h - 32);
+
+    // Electric Cyan Inner Frame
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#00f0ff';
+    ctx.strokeRect(22, 22, w - 44, h - 44);
+
+    // 3. Vintage Arcade Marquee Chaser Bulbs (Simpsons Noiseland Arcade / Pokemon Game Corner)
+    const bulbMargin = isWide ? 30 : 40;
+    const bulbSpacing = isWide ? 44 : 50;
+    const bulbRadius = isWide ? 7.5 : 9;
+    const bulbColors = ['#ffe600', '#ff1493', '#00f0ff', '#39ff14', '#ff7700'];
+    let bulbIndex = 0;
+
+    const drawBulb = (bx: number, by: number) => {
+      const col = bulbColors[bulbIndex % bulbColors.length];
+      bulbIndex++;
+
+      // Dark socket ring
+      ctx.beginPath();
+      ctx.arc(bx, by, bulbRadius + 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#000000';
+      ctx.fill();
+
+      // Colored bulb
+      ctx.beginPath();
+      ctx.arc(bx, by, bulbRadius, 0, Math.PI * 2);
+      ctx.fillStyle = col;
+      ctx.fill();
+
+      // White specular glint
+      ctx.beginPath();
+      ctx.arc(bx - bulbRadius * 0.35, by - bulbRadius * 0.35, bulbRadius * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+    };
+
+    // Top & Bottom rows of bulbs
+    for (let x = bulbMargin; x <= w - bulbMargin; x += bulbSpacing) {
+      drawBulb(x, bulbMargin);
+      drawBulb(x, h - bulbMargin);
+    }
+    // Left & Right columns of bulbs
+    for (let y = bulbMargin + bulbSpacing; y <= h - bulbMargin - bulbSpacing; y += bulbSpacing) {
+      drawBulb(bulbMargin, y);
+      drawBulb(w - bulbMargin, y);
+    }
+
+    // 4. Corner Comic Starbursts
+    const starInset = isWide ? 62 : 76;
+    drawComicStar(ctx, starInset, starInset, 26, 11, '#ffe600', '#000000', 4);
+    drawComicStar(ctx, w - starInset, starInset, 26, 11, '#00f0ff', '#000000', 4);
+    drawComicStar(ctx, starInset, h - starInset, 26, 11, '#ff1493', '#000000', 4);
+    drawComicStar(ctx, w - starInset, h - starInset, 26, 11, '#ffe600', '#000000', 4);
+
+    if (isWide) {
+      // -----------------------------------------------------------------------
+      // WIDE MARQUEE LAYOUT ("PIXEL PARADISE ARCADE")
+      // -----------------------------------------------------------------------
+      const mainY = 160;
+
+      // Draw Comic Pop Stars flanking the text
+      drawComicStar(ctx, 150, mainY - 45, 22, 9, '#ffe600', '#000000', 3.5);
+      drawComicStar(ctx, 1370, mainY + 45, 18, 8, '#ff7700', '#000000', 3);
+      drawComicStar(ctx, 1880, mainY - 45, 22, 9, '#00f0ff', '#000000', 3.5);
+
+      ctx.font = '900 114px "Arial Black", Impact, "Fredoka One", sans-serif';
+      const titleText = 'PIXEL PARADISE';
+      const titleX = 760;
+
+      // 3D Block Cartoon Extrusion for "PIXEL PARADISE" (Simpsons Hit & Run 3D font style)
+      // 7 offset steps down and to the right in solid black
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (let s = 7; s >= 1; s--) {
+        const ox = s * 1.8;
+        const oy = s * 2.4;
+        ctx.fillStyle = '#000000';
+        ctx.fillText(titleText, titleX + ox, mainY + oy);
+      }
+
+      // Heavy Cartoon Outline (Outer stroke)
+      ctx.lineWidth = 20;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(titleText, titleX, mainY);
+
+      // Simpsons Yellow Gradient Fill
+      const yellowGrad = ctx.createLinearGradient(0, mainY - 60, 0, mainY + 60);
+      yellowGrad.addColorStop(0, '#ffff55'); // Sunny bright yellow
+      yellowGrad.addColorStop(0.4, '#ffd200'); // Simpsons Canary Gold
+      yellowGrad.addColorStop(0.85, '#ff8c00'); // Deep warm comic orange
+      yellowGrad.addColorStop(1, '#ff6600');
+      ctx.fillStyle = yellowGrad;
+      ctx.fillText(titleText, titleX, mainY);
+
+      // Inner Comic Stroke (crisp bright rim)
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText(titleText, titleX, mainY);
+
+      // "ARCADE" BADGE (Homer Donut Pink with Pokemon/Arcade flair)
+      const badgeX = 1610;
+      const badgeY = mainY;
+      const badgeW = 420;
+      const badgeH = 132;
+
+      // Badge 3D drop shadow
+      ctx.fillStyle = '#000000';
+      drawRoundRect(ctx, badgeX - badgeW / 2 + 8, badgeY - badgeH / 2 + 10, badgeW, badgeH, 26);
+      ctx.fill();
+
+      // Badge background (Hot magenta to deep pink gradient)
+      const badgeGrad = ctx.createLinearGradient(0, badgeY - badgeH / 2, 0, badgeY + badgeH / 2);
+      badgeGrad.addColorStop(0, '#ff1493');
+      badgeGrad.addColorStop(0.5, '#ff007f');
+      badgeGrad.addColorStop(1, '#a0004e');
+      ctx.fillStyle = badgeGrad;
+      drawRoundRect(ctx, badgeX - badgeW / 2, badgeY - badgeH / 2, badgeW, badgeH, 26);
+      ctx.fill();
+
+      // Badge cartoon black outline + cyan inner neon stroke
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = '#000000';
+      drawRoundRect(ctx, badgeX - badgeW / 2, badgeY - badgeH / 2, badgeW, badgeH, 26);
+      ctx.stroke();
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#00f0ff';
+      drawRoundRect(ctx, badgeX - badgeW / 2 + 6, badgeY - badgeH / 2 + 6, badgeW - 12, badgeH - 12, 20);
+      ctx.stroke();
+
+      // "ARCADE" Text inside badge
+      ctx.font = '900 82px "Arial Black", Impact, sans-serif';
+      for (let s = 6; s >= 1; s--) {
+        ctx.fillStyle = '#000000';
+        ctx.fillText('ARCADE', badgeX + s * 1.5, badgeY + s * 2.0);
+      }
+      ctx.lineWidth = 16;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText('ARCADE', badgeX, badgeY);
+
+      const arcGrad = ctx.createLinearGradient(0, badgeY - 40, 0, badgeY + 40);
+      arcGrad.addColorStop(0, '#ffffff');
+      arcGrad.addColorStop(0.35, '#fff066');
+      arcGrad.addColorStop(1, '#ffd000');
+      ctx.fillStyle = arcGrad;
+      ctx.fillText('ARCADE', badgeX, badgeY);
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText('ARCADE', badgeX, badgeY);
+
+      // -----------------------------------------------------------------------
+      // SUBTITLE HIGH-CONTRAST MARQUEE BANNER PLAQUE
+      // "★ RETRO COIN-OP  •  MINI-GAMES  •  REDLINE RUSH  •  FREE PLAY ★"
+      // -----------------------------------------------------------------------
+      const subY = 312;
+      const subW = 1760;
+      const subH = 76;
+      const subX = w / 2;
+
+      // Banner shadow
+      ctx.fillStyle = '#000000';
+      drawRoundRect(ctx, subX - subW / 2 + 6, subY - subH / 2 + 8, subW, subH, 18);
+      ctx.fill();
+
+      // Banner plate background (Dark midnight obsidian violet)
+      const subBgGrad = ctx.createLinearGradient(0, subY - subH / 2, 0, subY + subH / 2);
+      subBgGrad.addColorStop(0, '#1c0836');
+      subBgGrad.addColorStop(1, '#0d021c');
+      ctx.fillStyle = subBgGrad;
+      drawRoundRect(ctx, subX - subW / 2, subY - subH / 2, subW, subH, 18);
+      ctx.fill();
+
+      // Banner border (Hot Pink outer + Electric Cyan inner)
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#ff007f';
+      drawRoundRect(ctx, subX - subW / 2, subY - subH / 2, subW, subH, 18);
+      ctx.stroke();
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#00f0ff';
+      drawRoundRect(ctx, subX - subW / 2 + 4, subY - subH / 2 + 4, subW - 8, subH - 8, 14);
+      ctx.stroke();
+
+      // Subtitle Text (Crystal clear, high-contrast, bold cartoon yellow styling)
+      ctx.font = '900 38px "Arial Black", Impact, sans-serif';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#000000';
+      const subText = '★ RETRO COIN-OP  •  MINI-GAMES  •  REDLINE RUSH  •  FREE PLAY ★';
+      ctx.strokeText(subText, subX, subY + 2);
+      ctx.fillStyle = '#ffe600';
+      ctx.fillText(subText, subX, subY + 2);
+
+      // Star sparkle glints inside the subtitle
+      drawComicStar(ctx, subX - subW / 2 + 36, subY + 1, 14, 6, '#ffffff', '#000000', 2);
+      drawComicStar(ctx, subX + subW / 2 - 36, subY + 1, 14, 6, '#ffffff', '#000000', 2);
+    } else {
+      // -----------------------------------------------------------------------
+      // MONUMENT BILLBOARD LAYOUT (X=BUILDING_X-18 roadside sign)
+      // -----------------------------------------------------------------------
+      const centerX = w / 2;
+
+      // Top Comic Starbursts
+      drawComicStar(ctx, 160, 160, 30, 13, '#ffe600', '#000000', 5);
+      drawComicStar(ctx, w - 160, 160, 30, 13, '#00f0ff', '#000000', 5);
+
+      // Line 1: "PIXEL PARADISE" in huge Simpsons yellow 3D lettering
+      const y1 = 250;
+      ctx.font = '900 120px "Arial Black", Impact, "Fredoka One", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      // 3D block extrusion
+      for (let s = 8; s >= 1; s--) {
+        ctx.fillStyle = '#000000';
+        ctx.fillText('PIXEL PARADISE', centerX + s * 1.8, y1 + s * 2.4);
+      }
+
+      ctx.lineWidth = 22;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText('PIXEL PARADISE', centerX, y1);
+
+      const yGrad = ctx.createLinearGradient(0, y1 - 65, 0, y1 + 65);
+      yGrad.addColorStop(0, '#ffff55');
+      yGrad.addColorStop(0.5, '#ffd200');
+      yGrad.addColorStop(1, '#ff7700');
+      ctx.fillStyle = yGrad;
+      ctx.fillText('PIXEL PARADISE', centerX, y1);
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText('PIXEL PARADISE', centerX, y1);
+
+      // Line 2: "ARCADE" in big Donut Pink / Pokemon badge
+      const y2 = 490;
+      const bW = 680;
+      const bH = 150;
+
+      ctx.fillStyle = '#000000';
+      drawRoundRect(ctx, centerX - bW / 2 + 8, y2 - bH / 2 + 10, bW, bH, 30);
+      ctx.fill();
+
+      const bGrad = ctx.createLinearGradient(0, y2 - bH / 2, 0, y2 + bH / 2);
+      bGrad.addColorStop(0, '#ff1493');
+      bGrad.addColorStop(0.5, '#ff007f');
+      bGrad.addColorStop(1, '#980045');
+      ctx.fillStyle = bGrad;
+      drawRoundRect(ctx, centerX - bW / 2, y2 - bH / 2, bW, bH, 30);
+      ctx.fill();
+
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#000000';
+      drawRoundRect(ctx, centerX - bW / 2, y2 - bH / 2, bW, bH, 30);
+      ctx.stroke();
+
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#00f0ff';
+      drawRoundRect(ctx, centerX - bW / 2 + 7, y2 - bH / 2 + 7, bW - 14, bH - 14, 23);
+      ctx.stroke();
+
+      ctx.font = '900 96px "Arial Black", Impact, sans-serif';
+      for (let s = 6; s >= 1; s--) {
+        ctx.fillStyle = '#000000';
+        ctx.fillText('ARCADE', centerX + s * 1.5, y2 + s * 2.0);
+      }
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText('ARCADE', centerX, y2);
+
+      const aGrad = ctx.createLinearGradient(0, y2 - 48, 0, y2 + 48);
+      aGrad.addColorStop(0, '#ffffff');
+      aGrad.addColorStop(0.35, '#fff277');
+      aGrad.addColorStop(1, '#ffc700');
+      ctx.fillStyle = aGrad;
+      ctx.fillText('ARCADE', centerX, y2);
+
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeText('ARCADE', centerX, y2);
+
+      // Line 3: Subtitle Ribbon Plaque
+      const y3 = 730;
+      const sW = 1050;
+      const sH = 100;
+
+      ctx.fillStyle = '#000000';
+      drawRoundRect(ctx, centerX - sW / 2 + 6, y3 - sH / 2 + 8, sW, sH, 22);
+      ctx.fill();
+
+      const sGrad = ctx.createLinearGradient(0, y3 - sH / 2, 0, y3 + sH / 2);
+      sGrad.addColorStop(0, '#1c0836');
+      sGrad.addColorStop(1, '#0c0218');
+      ctx.fillStyle = sGrad;
+      drawRoundRect(ctx, centerX - sW / 2, y3 - sH / 2, sW, sH, 22);
+      ctx.fill();
+
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#00f0ff';
+      drawRoundRect(ctx, centerX - sW / 2, y3 - sH / 2, sW, sH, 22);
+      ctx.stroke();
+
+      ctx.font = '900 44px "Arial Black", Impact, sans-serif';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#000000';
+      const monSubText = '★ RETRO ARCADE & MINI-GAMES ★';
+      ctx.strokeText(monSubText, centerX, y3 + 2);
+      ctx.fillStyle = '#ffe600';
+      ctx.fillText(monSubText, centerX, y3 + 2);
+
+      // Line 4: Bottom Coin-Op Tag
+      const y4 = 880;
+      ctx.font = '900 32px "Arial Black", Impact, sans-serif';
+      ctx.fillStyle = '#f8fafc';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = '#000000';
+      const tagText = 'INSERT COIN TO PLAY • 8-BIT & 16-BIT CLASSICS';
+      ctx.strokeText(tagText, centerX, y4);
+      ctx.fillText(tagText, centerX, y4);
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 16;
+  return texture;
+}
+
+/**
+ * Creates a high-resolution, high-contrast canvas texture for signs, posters, and marquee displays.
  */
 function createArcadeLabelTexture(
   text: string,
@@ -35,45 +486,97 @@ function createArcadeLabelTexture(
   accent = '#e040fb'
 ): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = Math.round(512 * (height / width));
+  // High resolution: 1024 width and crisp proportional height
+  const aspect = height / width;
+  canvas.width = 1024;
+  canvas.height = Math.max(256, Math.round(1024 * aspect));
   const ctx = canvas.getContext('2d');
   if (ctx) {
+    const w = canvas.width;
+    const h = canvas.height;
+
     // Background gradient
-    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, bg);
     grad.addColorStop(1, '#05030a');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, w, h);
 
-    // Neon border
+    // Outer dark frame + vibrant neon border
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 14;
+    ctx.strokeRect(7, 7, w - 14, h - 14);
+
     ctx.strokeStyle = accent;
-    ctx.lineWidth = 10;
-    ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(12, 12, w - 24, h - 24);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.lineWidth = 3;
-    ctx.strokeRect(14, 14, canvas.width - 28, canvas.height - 28);
+    ctx.strokeRect(18, 18, w - 36, h - 36);
 
     // Main Text
-    ctx.font = '900 46px "Arial Black", Impact, sans-serif';
+    const fontSize = Math.min(84, Math.round(h * (subtitle ? 0.32 : 0.44)));
+    ctx.font = `900 ${fontSize}px "Arial Black", Impact, "Fredoka One", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = 18;
+
+    const yPos = subtitle ? h * 0.40 : h * 0.50;
+
+    // 3D Cartoon block extrusion (comic drop shadow)
+    for (let s = 6; s >= 1; s--) {
+      ctx.fillStyle = '#000000';
+      ctx.fillText(text, w / 2 + s * 1.5, yPos + s * 2.0);
+    }
+
+    // Heavy cartoon black stroke
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(text, w / 2, yPos);
+
+    // Main text fill
     ctx.fillStyle = color;
-    const yPos = subtitle ? canvas.height * 0.42 : canvas.height * 0.5;
-    ctx.fillText(text, canvas.width / 2, yPos);
+    ctx.fillText(text, w / 2, yPos);
+
+    // Inner bright rim highlight
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.strokeText(text, w / 2, yPos);
 
     if (subtitle) {
-      ctx.shadowBlur = 8;
-      ctx.shadowColor = '#ffffff';
-      ctx.font = 'bold 22px monospace';
+      const subFontSize = Math.min(36, Math.max(22, Math.round(h * 0.16)));
+      const subY = h * 0.75;
+
+      // Subtitle plate
+      const subPlateW = Math.min(w - 60, ctx.measureText(subtitle).width + 60);
+      const subPlateH = subFontSize * 1.8;
+      ctx.fillStyle = '#000000';
+      drawRoundRect(ctx, w / 2 - subPlateW / 2 + 4, subY - subPlateH / 2 + 4, subPlateW, subPlateH, 12);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(15, 6, 32, 0.9)';
+      drawRoundRect(ctx, w / 2 - subPlateW / 2, subY - subPlateH / 2, subPlateW, subPlateH, 12);
+      ctx.fill();
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = accent;
+      drawRoundRect(ctx, w / 2 - subPlateW / 2, subY - subPlateH / 2, subPlateW, subPlateH, 12);
+      ctx.stroke();
+
+      ctx.font = `900 ${subFontSize}px "Arial Black", Impact, monospace`;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#000000';
+      ctx.strokeText(subtitle, w / 2, subY);
       ctx.fillStyle = '#f8fafc';
-      ctx.fillText(subtitle, canvas.width / 2, canvas.height * 0.74);
+      ctx.fillText(subtitle, w / 2, subY);
     }
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.anisotropy = 16;
   return texture;
 }
 
@@ -485,22 +988,33 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   monPillar.position.y = 4.8;
   markSolid(monPillar);
 
-  // Glowing Marquee Billboard
+  // Glowing Marquee Billboard ("PIXEL PARADISE") - Simpsons & Pokemon Comic Style
+  const monSignTex = createSimpsonsPokemonArcadeSignTexture('monument_billboard');
   const monSignMat = new THREE.MeshBasicMaterial({
-    map: createArcadeLabelTexture('PIXEL PARADISE', 4.4, 2.2, '#00f0ff', '#2d0a4e', '★ RETRO ARCADE & MINI-GAMES ★', '#ff007f'),
+    map: monSignTex,
     toneMapped: false,
+    side: THREE.DoubleSide,
   });
-  const monSignFront = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.2), monSignMat);
+
+  // Front billboard face (facing +Z)
+  const monSignFront = new THREE.Mesh(createOrientedSignPlane(4.4, 2.2, 'posZ'), monSignMat);
   monSignFront.position.set(0, 5.8, 0.42);
-  const monSignBack = monSignFront.clone();
-  monSignBack.rotation.y = Math.PI;
-  monSignBack.position.z = -0.42;
+
+  // Back billboard face (facing -Z, unmirrored UVs for oncoming traffic)
+  const monSignBack = new THREE.Mesh(createOrientedSignPlane(4.4, 2.2, 'negZ'), monSignMat);
+  monSignBack.position.set(0, 5.8, -0.42);
+
+  // Radiant Neon Illumination Wash on Billboard
+  const monNeonLightFront = new THREE.PointLight(0xffe600, 2.0, 14);
+  monNeonLightFront.position.set(0, 5.8, 1.4);
+  const monNeonLightBack = new THREE.PointLight(0xff007f, 2.0, 14);
+  monNeonLightBack.position.set(0, 5.8, -1.4);
 
   // Flashing Star Topper
   const starTopper = new THREE.Mesh(new THREE.OctahedronGeometry(0.75, 0), neonGoldMat);
   starTopper.position.y = 9.0;
 
-  monument.add(monBase, monPillar, monSignFront, monSignBack, starTopper);
+  monument.add(monBase, monPillar, monSignFront, monSignBack, monNeonLightFront, monNeonLightBack, starTopper);
   root.add(monument);
 
   // -------------------------------------------------------------------------
@@ -529,18 +1043,22 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   markWalkable(roof, 9);
   bldgGroup.add(roof);
 
-  // Roof Parapet / Guardrails
+  // Roof Parapet / Guardrails (flanking the central 23.4m marquee structure)
   const roofRailMat = createMaterial(0x4b5563, 0.4, 0.7);
-  const roofRailFront = new THREE.Mesh(new THREE.BoxGeometry(BUILDING_W + 1.2, 0.9, 0.35), roofRailMat);
-  roofRailFront.position.set(0, BUILDING_H + 0.45, -halfD - 0.5);
-  const roofRailBack = roofRailFront.clone();
-  roofRailBack.position.z = halfD + 0.5;
+  const railSideW = (BUILDING_W + 1.2 - 23.4) / 2; // ~7.9m each side
+  const roofRailFrontL = new THREE.Mesh(new THREE.BoxGeometry(railSideW, 0.9, 0.35), roofRailMat);
+  roofRailFrontL.position.set(-halfW - 0.6 + railSideW / 2, BUILDING_H + 0.45, -halfD - 0.5);
+  const roofRailFrontR = new THREE.Mesh(new THREE.BoxGeometry(railSideW, 0.9, 0.35), roofRailMat);
+  roofRailFrontR.position.set(halfW + 0.6 - railSideW / 2, BUILDING_H + 0.45, -halfD - 0.5);
+
+  const roofRailBack = new THREE.Mesh(new THREE.BoxGeometry(BUILDING_W + 1.2, 0.9, 0.35), roofRailMat);
+  roofRailBack.position.set(0, BUILDING_H + 0.45, halfD + 0.5);
   const roofRailLeft = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.9, BUILDING_D + 1.2), roofRailMat);
   roofRailLeft.position.set(-halfW - 0.5, BUILDING_H + 0.45, 0);
   const roofRailRight = roofRailLeft.clone();
   roofRailRight.position.x = halfW + 0.5;
-  for (const r of [roofRailFront, roofRailBack, roofRailLeft, roofRailRight]) markSolid(r);
-  bldgGroup.add(roofRailFront, roofRailBack, roofRailLeft, roofRailRight);
+  for (const r of [roofRailFrontL, roofRailFrontR, roofRailBack, roofRailLeft, roofRailRight]) markSolid(r);
+  bldgGroup.add(roofRailFrontL, roofRailFrontR, roofRailBack, roofRailLeft, roofRailRight);
 
   // Rooftop HVAC units & Antenna
   const hvac1 = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.8, 2.5), metalFrameMat);
@@ -600,30 +1118,94 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   windowRight.position.x = 8.5;
   bldgGroup.add(windowLeft, windowRight);
 
-  // Giant Main Marquee Exterior Sign: "PIXEL PARADISE ARCADE"
-  const marqueeWidth = 24;
-  const marqueeHeight = 3.2;
-  const mainSignTex = createArcadeLabelTexture(
-    'PIXEL PARADISE ARCADE',
-    marqueeWidth,
-    marqueeHeight,
-    '#00f0ff',
-    '#170329',
-    '★ RETRO COIN-OP • MINI-GAMES • REDLINE RUSH ★',
-    '#ff007f'
-  );
-  const marqueeSignMat = new THREE.MeshBasicMaterial({ map: mainSignTex, toneMapped: false });
-  const marqueeSign = new THREE.Mesh(new THREE.BoxGeometry(marqueeWidth, marqueeHeight, 0.5), marqueeSignMat);
-  marqueeSign.position.set(0, 5.2, -halfD - 0.4);
-  bldgGroup.add(marqueeSign);
+  // Giant Main Marquee Exterior Sign: "PIXEL PARADISE ARCADE" (Simpsons Hit & Run / Pokemon Style)
+  const marqueeWidth = 23.0;
+  const marqueeHeight = 4.4;
+  const casingDepth = 2.0; // Thick substantial 3D marquee cabinet box
+  const mainSignTex = createSimpsonsPokemonArcadeSignTexture('wide_marquee');
+  const marqueeSignMat = new THREE.MeshBasicMaterial({
+    map: mainSignTex,
+    toneMapped: false,
+    side: THREE.FrontSide,
+  });
 
-  // Neon Portico Canopy over entrance
-  const canopy = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 2.4, 0.4, 3.2), createMaterial(0x1e1b2e));
-  canopy.position.set(0, 4.3, -halfD - 1.6);
+  const marqueeGroup = new THREE.Group();
+  marqueeGroup.name = 'arcade_exterior_main_marquee';
+  // Positioned so the 2.0m thick cabinet anchors into the front wall and projects well out in front of the roof overhang
+  // Roof overhang is at z = -halfD - 0.6 (-16.6).
+  // Front face of sign sits at z = -18.02 (1.4m IN FRONT of the roof, completely unobstructed!)
+  marqueeGroup.position.set(0, 6.4, -halfD - 1.0);
+
+  // Heavy Metal Chassis Box Casing (z depth 2.0, spans z = -1.0 to +1.0)
+  const marqueeCasing = new THREE.Mesh(
+    new THREE.BoxGeometry(marqueeWidth + 0.4, marqueeHeight + 0.4, casingDepth),
+    metalFrameMat
+  );
+  markSolid(marqueeCasing);
+  marqueeGroup.add(marqueeCasing);
+
+  // Heavy industrial steel support brackets underneath connecting cabinet to facade
+  for (const bx of [-9, -3, 3, 9]) {
+    const bracket = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35, 0.35, casingDepth),
+      metalFrameMat
+    );
+    bracket.position.set(bx, -marqueeHeight / 2 - 0.22, 0);
+    marqueeGroup.add(bracket);
+  }
+
+  // The Illuminated Front Signboard (Facing -Z towards entrance plaza, UNMIRRORED!)
+  // Placed at z = -casingDepth / 2 - 0.02 (in front of casing face, zero roof obstruction)
+  const signFrontZ = -casingDepth / 2 - 0.02;
+  const marqueeSignPlaneGeom = createOrientedSignPlane(marqueeWidth, marqueeHeight, 'negZ');
+  const marqueeSign = new THREE.Mesh(marqueeSignPlaneGeom, marqueeSignMat);
+  marqueeSign.position.z = signFrontZ;
+  marqueeGroup.add(marqueeSign);
+
+  // Physical 3D Glowing Neon Tube Accents framing the front marquee perimeter
+  const neonRailTop = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, marqueeWidth + 0.3, 8),
+    neonPinkMat
+  );
+  neonRailTop.rotation.z = Math.PI / 2;
+  neonRailTop.position.set(0, marqueeHeight / 2 + 0.16, signFrontZ - 0.02);
+
+  const neonRailBottom = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, marqueeWidth + 0.3, 8),
+    neonCyanMat
+  );
+  neonRailBottom.rotation.z = Math.PI / 2;
+  neonRailBottom.position.set(0, -marqueeHeight / 2 - 0.16, signFrontZ - 0.02);
+
+  const neonRailLeft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, marqueeHeight + 0.3, 8),
+    neonPinkMat
+  );
+  neonRailLeft.position.set(-marqueeWidth / 2 - 0.16, 0, signFrontZ - 0.02);
+
+  const neonRailRight = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.06, 0.06, marqueeHeight + 0.3, 8),
+    neonCyanMat
+  );
+  neonRailRight.position.set(marqueeWidth / 2 + 0.16, 0, signFrontZ - 0.02);
+
+  marqueeGroup.add(neonRailTop, neonRailBottom, neonRailLeft, neonRailRight);
+  bldgGroup.add(marqueeGroup);
+
+  // Neon Portico Canopy over entrance (lowered to Y = 3.75 so the marquee above is 100% visible)
+  const canopy = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 2.4, 0.3, 2.6), createMaterial(0x1e1b2e));
+  canopy.position.set(0, 3.75, -halfD - 1.3);
   markSolid(canopy);
-  const canopyNeon = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 2.5, 0.12, 3.3), neonPinkMat);
-  canopyNeon.position.set(0, 4.15, -halfD - 1.6);
+  const canopyNeon = new THREE.Mesh(new THREE.BoxGeometry(doorWidth + 2.5, 0.08, 2.7), neonPinkMat);
+  canopyNeon.position.set(0, 3.65, -halfD - 1.3);
   bldgGroup.add(canopy, canopyNeon);
+
+  // Radiant Neon Illumination Wash under canopy and on forecourt floor
+  const canopyWashLight = new THREE.PointLight(0xff007f, 1.8, 14);
+  canopyWashLight.position.set(0, 3.4, -halfD - 1.3);
+  const entranceGlowYellow = new THREE.PointLight(0xffe600, 1.6, 12);
+  entranceGlowYellow.position.set(0, 3.4, -halfD - 0.4);
+  bldgGroup.add(canopyWashLight, entranceGlowYellow);
 
   // Exterior Wall Posters
   const posterSpecs = [

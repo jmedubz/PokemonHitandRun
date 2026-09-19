@@ -24,6 +24,7 @@ import {
   createSonicNPC,
   createMasterChiefNPC,
   createGenericCitizenNPC,
+  createArcadePrizeHostNPC,
   createPopCultureCameoNPC,
   polishPopCultureCameoNPC,
   createSnorlaxNPC,
@@ -538,6 +539,10 @@ export class NPCManager {
     }
     if (this.aquaticSurface && !this.aquaticSurface(candidate)) return false;
     if (!this.canFlyOccupy(candidate, radius, height)) return false;
+
+    // Keep swimming NPCs completely away from the Arcade causeway road (X: -7 to 23, Z: -250 to -160)
+    // so aquatic Pokémon never get stuck on or near the road structure in the water.
+    if (candidate.x >= -7 && candidate.x <= 23 && candidate.z >= -250 && candidate.z <= -160) return false;
 
     // Only a handful of authored swimmers exist, so this tiny aquatic-only list is
     // much cheaper than putting them into the full pedestrian crowd grid.
@@ -1780,6 +1785,22 @@ export class NPCManager {
         dialogues: ['HEY HEY! Welcome to Krusty Burger!', 'Buy a Krusty Burger or get outta here!', 'I have absolutely no idea what is in the meat.'],
         modelFactory: createKrustyClownNPC, bounds: { minX: -275, maxX: -265, minZ: -136.5, maxZ: -132.5 }, stationary: true, combatWeight: 1.1,
       },
+      {
+        id: 'arcade_prize_host_toby',
+        name: 'Toby • Prize Host',
+        type: 'arcade_host',
+        pos: [-5.5, 0.12, -292.3],
+        dialogues: [
+          'Welcome to the Tickets & Prizes counter! Ready to redeem your arcade points?',
+          'The giant Pikachu plush is 5,000 tickets. Better get grinding Redline Rush or Neon Claw!',
+          'High score today on Space Invaders wins an exclusive retro mystery crate!',
+          'Did you try the Claw Machine yet? The physics are 100% fair, I calibrated them myself!',
+          'Keep your tickets safe—you can redeem everything from candy to sports car keys!',
+        ],
+        modelFactory: createArcadePrizeHostNPC,
+        bounds: { minX: -6.5, maxX: -4.5, minZ: -293.0, maxZ: -291.6 },
+        stationary: true,
+      },
       // Occupied suburban interiors. These stay inside their own house bounds rather
       // than turning every residence into another empty prop building.
       {
@@ -2148,9 +2169,9 @@ export class NPCManager {
         waterSurfaceY: 0.075, swimDepth: 0.18, diveAmount: 0.08, swimSpeed: 0.31, combatWeight: 1.8,
       },
       {
-        id: 'water_gyarados', name: 'Gyarados', type: 'pokemon_gyarados', pos: [8, -1.18, -178],
+        id: 'water_gyarados', name: 'Gyarados', type: 'pokemon_gyarados', pos: [-24, -1.18, -192],
         dialogues: ['GYARADOS!', '*a huge shape moves below the surface*', '*roars from the river*'], modelFactory: createGyaradosNPC,
-        bounds: { minX: -34, maxX: 34, minZ: -212, maxZ: -142 }, cameo: true, movementMode: 'swimming',
+        bounds: { minX: -44, maxX: -9, minZ: -224, maxZ: -148 }, cameo: true, movementMode: 'swimming',
         waterSurfaceY: 0.075, swimDepth: 1.18, diveAmount: 0.75, swimSpeed: 0.26, combatWeight: 2.7, combatHp: 210,
       },
     );
@@ -4243,8 +4264,24 @@ export class NPCManager {
           // Do not freeze permanently against one support: alternate the preferred
           // bypass side and let the moving orbit target pull the swimmer around it.
           npc.mesh.userData.swimAvoidSide = -preferSide;
-          npc.mesh.userData.swimBlockedTimer = Number(npc.mesh.userData.swimBlockedTimer ?? 0) + dt;
+          const blockedTime = Number(npc.mesh.userData.swimBlockedTimer ?? 0) + dt;
+          npc.mesh.userData.swimBlockedTimer = blockedTime;
           npc.mesh.position.y = desiredY;
+
+          // If blocked for more than 0.8s, or if anywhere near the causeway road, smoothly steer toward open water
+          if (blockedTime > 0.8 || (npc.mesh.position.x >= -7 && npc.mesh.position.x <= 23 && npc.mesh.position.z >= -250 && npc.mesh.position.z <= -160)) {
+            const escapeX = npc.mesh.position.x >= 8 ? 28 : -26;
+            const escapeZ = bounds ? THREE.MathUtils.clamp(npc.mesh.position.z, bounds.minZ + 4, bounds.maxZ - 4) : -188;
+            const escapeDX = escapeX - npc.mesh.position.x;
+            const escapeDZ = escapeZ - npc.mesh.position.z;
+            const escapeDist = Math.hypot(escapeDX, escapeDZ);
+            if (escapeDist > 0.1) {
+              const nudge = Math.min(escapeDist, dt * 1.8);
+              npc.mesh.position.x += (escapeDX / escapeDist) * nudge;
+              npc.mesh.position.z += (escapeDZ / escapeDist) * nudge;
+              npc.mesh.rotation.y = Math.atan2(escapeDX, escapeDZ);
+            }
+          }
         } else {
           npc.mesh.userData.swimBlockedTimer = 0;
           if (Math.abs(actualDX) + Math.abs(actualDZ) > 0.0001) npc.mesh.rotation.y = Math.atan2(actualDX, actualDZ);

@@ -481,6 +481,12 @@ export function buildConnectingHighway(): HighwayBuildResult {
   // to be chopped around X≈±110. That looked artificial and could still crowd the
   // perpendicular road junctions. Both visible barrier and collision now terminate
   // close to the water, leaving the land-side approaches/intersections completely open.
+  // Realistic practical bridge barriers featuring concrete parapet base,
+  // dual galvanized steel tubular guardrails, vertical steel stanchions, and safety delineators.
+  const viaductSteelMat = createMaterial(0xe5e7eb, 0.25, 0.85); // Galvanized steel
+  const viaductPostMat = createMaterial(0x4b5563, 0.3, 0.7); // Dark treated steel posts
+  const viaductReflectorMat = createMaterial(0xfef08a, 0.2, 0.8); // Amber highway cat-eyes
+
   const addViaductRailRun = (
     group: THREE.Group,
     z: number,
@@ -490,12 +496,39 @@ export function buildConnectingHighway(): HighwayBuildResult {
   ) => {
     const length = x2 - x1;
     if (length <= 0.05) return;
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(length, 1.0, 0.4), outerViaductRailMat);
-    rail.name = name;
-    rail.position.set((x1 + x2) / 2, 0.66, z);
-    rail.userData.solidCollider = true;
-    rail.userData.colliderPadding = 0;
-    group.add(rail);
+    const runGroup = new THREE.Group();
+    runGroup.name = name;
+    const centerX = (x1 + x2) / 2;
+
+    // 1. Concrete Parapet Base (0.72m high, 0.48m wide)
+    const base = new THREE.Mesh(new THREE.BoxGeometry(length, 0.72, 0.48), outerViaductRailMat);
+    base.position.set(centerX, 0.44, z);
+    base.userData.solidCollider = true;
+    base.userData.colliderPadding = 0;
+    runGroup.add(base);
+
+    // 2. Dual Galvanized Steel Tubular Guardrails
+    const lowerPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, length, 8), viaductSteelMat);
+    lowerPipe.rotation.z = Math.PI / 2;
+    lowerPipe.position.set(centerX, 0.95, z);
+    const upperPipe = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, length, 8), viaductSteelMat);
+    upperPipe.rotation.z = Math.PI / 2;
+    upperPipe.position.set(centerX, 1.25, z);
+    runGroup.add(lowerPipe, upperPipe);
+
+    // 3. Steel Mounting Stanchions & Safety Reflector Delineators every 6m
+    for (let x = x1 + 1.5; x <= x2 - 1.5; x += 6.0) {
+      const stanchion = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.65, 0.12), viaductPostMat);
+      stanchion.position.set(x, 1.05, z);
+      runGroup.add(stanchion);
+
+      const reflector = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.06), viaductReflectorMat);
+      const zOffset = z < -170 || z > 150 ? 0.26 : -0.26;
+      reflector.position.set(x, 0.95, z + zOffset);
+      runGroup.add(reflector);
+    }
+
+    group.add(runGroup);
   };
   // River banks end around X=±60. An 80m half-span gives the bridge a believable
   // 20m barrier run onto each bank while keeping the X≈±110 perpendicular roads
@@ -503,19 +536,36 @@ export function buildConnectingHighway(): HighwayBuildResult {
   const viaductBarrierHalfSpan = 80;
   const viaductBarrierMinX = -viaductBarrierHalfSpan;
   const viaductBarrierMaxX = viaductBarrierHalfSpan;
+  // North Highway Viaduct Barriers:
+  // South barrier (-170 + viaductWidth / 2 - 0.2 = -163.2):
+  // Sits strictly on the outer edge over the river canyon water. It runs unbroken across
+  // the water span because there are no roads connecting on the south side.
   addViaductRailRun(
     northViaductGroup,
     -170 + viaductWidth / 2 - 0.2,
     viaductBarrierMinX,
     viaductBarrierMaxX,
-    'north_viaduct_inner_concrete_barrier'
+    'north_viaduct_south_concrete_barrier'
   );
+
+  // North barrier (-170 - viaductWidth / 2 + 0.2 = -176.8):
+  // Sits strictly on the outer edge facing the water to the west and east of the
+  // Arcade Access Boulevard junction (centered at X = 8).
+  // The road connection (X = -2.0 to X = 18.0) is kept COMPLETELY OPEN with ZERO
+  // barriers, signs, barrels, or colliders, giving vehicles full, unobstructed access.
   addViaductRailRun(
     northViaductGroup,
     -170 - viaductWidth / 2 + 0.2,
     viaductBarrierMinX,
+    -2.0,
+    'north_viaduct_north_concrete_barrier_west'
+  );
+  addViaductRailRun(
+    northViaductGroup,
+    -170 - viaductWidth / 2 + 0.2,
+    18.0,
     viaductBarrierMaxX,
-    'north_viaduct_outer_concrete_barrier'
+    'north_viaduct_north_concrete_barrier_east'
   );
 
   root.add(northViaductGroup);

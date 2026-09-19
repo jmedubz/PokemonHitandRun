@@ -753,6 +753,20 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ---------------- TOP RIGHT: PERFORMANCE & CONTROLS ---------------- */}
       <div ref={topRightRef} className="absolute top-4 right-4 pointer-events-auto flex flex-col items-end gap-2.5">
         <div className="flex items-stretch justify-end gap-2">
+          <button
+            id="btn-pause-game"
+            type="button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
+              event.currentTarget.blur();
+              onTogglePause();
+            }}
+            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/80 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)] transition flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            title="Pause Game / Multiplayer Menu (ESC)"
+          >
+            <Pause className="w-4 h-4 text-amber-300" />
+            <span>PAUSE</span>
+          </button>
           <div
             className={`bg-slate-900/90 border-2 rounded-xl px-3 py-2 shadow-xl backdrop-blur-md min-w-[72px] text-center ${
               fps >= 50
@@ -785,20 +799,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
         {/* Quick Utility Buttons */}
         <div className="flex gap-2">
-          <button
-            id="btn-pause-game"
-            type="button"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.currentTarget.blur();
-              onTogglePause();
-            }}
-            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/80 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)] transition flex items-center gap-1.5 text-xs font-black cursor-pointer"
-            title="Pause Game / Multiplayer Menu (ESC)"
-          >
-            <Pause className="w-4 h-4 text-amber-300" />
-            <span>PAUSE</span>
-          </button>
           {isMultiplayerActive && (
             <button
               id="btn-hud-multiplayer"

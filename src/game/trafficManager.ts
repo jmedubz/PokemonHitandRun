@@ -276,6 +276,8 @@ export class TrafficManager {
       // coherent Australian left-hand road from the north perimeter to the south.
       { x: -145, minZ: 67, maxZ: 152, lane: 4 },
       { x: -110, minZ: -172, maxZ: 152, lane: 4 },
+      // Arcade Boulevard & Causeway (X = 8, connecting Northern Viaduct at Z = -168 to Forecourt at Z = -273)
+      { x: 8, minZ: -273, maxZ: -168, lane: 3.5 },
       // Goldenrod
       { x: 110, minZ: -172, maxZ: 152, lane: 4 },
       { x: 200, minZ: -172, maxZ: 152, lane: 4 },
@@ -299,6 +301,8 @@ export class TrafficManager {
       { z: -90, minX: 108, maxX: 312, lane: 4 },
       { z: 0, minX: 108, maxX: 312, lane: 4 },
       { z: 90, minX: 108, maxX: 312, lane: 4 },
+      // Arcade Extended Connectors (Z = -273, from West Airport connector X = -168 to East Airport connector X = 278)
+      { z: -273, minX: -168, maxX: 278, lane: 3.5 },
     ];
 
     const laneTolerance = 5.4;
@@ -1784,12 +1788,51 @@ export class TrafficManager {
         [-183,-18],[-186,-22],[-185,-27],[-185,-32],[-185,-60],
         [-310,-60],[-310,60],[-110,60],[-110,150],
       ]),
+      // Arcade Pixel Paradise circuit: brings traffic down from Northern Viaduct into
+      // the car park forecourt, out along the East Extended Road to Goldenrod, and back.
+      this.route('arcade_circuit_loop', 13.5, [
+        [8, -170],
+        [8, -215],
+        [8, -260],
+        [16, -268],
+        [24, -273],
+        [60, -273],
+        [150, -273],
+        [273, -273],
+        [278, -266],
+        [296, -230],
+        [310, -194],
+        [310, -150],
+        [260, -150],
+        [200, -154],
+        [200, -170],
+        [134, -170],
+        [8, -170],
+      ]),
+      // Arcade West Connector: brings traffic from Springfield and Airport West approach
+      // into Pixel Paradise car park and back up onto the Northern Viaduct.
+      this.route('arcade_west_loop', 13.0, [
+        [-185, -170],
+        [-185, -214],
+        [-178, -248],
+        [-168, -273],
+        [-110, -273],
+        [-40, -273],
+        [-10, -273],
+        [0, -268],
+        [8, -260],
+        [8, -215],
+        [8, -170],
+        [-60, -170],
+        [-134, -170],
+        [-185, -170],
+      ]),
     ];
 
     // Keep the authored lane geometry available to pursuit AI. Police use this
     // only as a steering hint when practical; close-range interception still targets
     // the player directly.
-    this.pursuitRoadRoutes = [...routes.slice(0, 6), routes[7], routes[8], routes[9], routes[10], airportOutboundRoute, airportReturnRoute].filter(Boolean);
+    this.pursuitRoadRoutes = [...routes.slice(0, 6), routes[7], routes[8], routes[9], routes[10], routes[11], routes[12], airportOutboundRoute, airportReturnRoute].filter(Boolean);
 
     const factories = [createSedanTraffic, createSuvTraffic, createSportsCarTraffic, createConvertibleTraffic];
     const counts = [4, 4, 4, 3, 4, 3];
@@ -1825,6 +1868,64 @@ export class TrafficManager {
     // network without turning the compact junction into another congestion hotspot.
     const evergreenLinkRoute = routes[10];
     this.addVehicle(evergreenLinkRoute, 0, idCounter++, factories[0], false);
+
+    // Pixel Paradise Arcade road network: moving ambient traffic in and out of the car park
+    const arcadeCircuitRoute = routes[11];
+    for (let i = 0; i < 2; i++) {
+      const pointIndex = this.routeIndexAtFraction(arcadeCircuitRoute, (i + 0.25) / 2);
+      this.addVehicle(arcadeCircuitRoute, pointIndex, idCounter++, factories[(i + 2) % factories.length], false);
+    }
+    const arcadeWestRoute = routes[12];
+    for (let i = 0; i < 2; i++) {
+      const pointIndex = this.routeIndexAtFraction(arcadeWestRoute, (i + 0.45) / 2);
+      this.addVehicle(arcadeWestRoute, pointIndex, idCounter++, factories[(i + 1) % factories.length], false);
+    }
+
+    // Pixel Paradise Arcade Parking Lot: Stationary parked cars in the parking bays along the entrance sidewalk
+    const arcadeStall1 = this.route('arcade_carpark_sedan', 0, [
+      [-10.0, -281],
+      [-10.0, -284],
+    ]);
+    this.addVehicle(arcadeStall1, 0, idCounter++, createSportsCarTraffic, false, {
+      type: 'arcade_visitor_sports',
+      name: 'Pixel Turbo GT',
+      maxSpeed: 42,
+      acceleration: 24,
+      weight: 1.1,
+      cruiseScale: 0,
+      driverName: 'Arcade Gamer',
+      noDriver: true,
+    });
+
+    const arcadeStall2 = this.route('arcade_carpark_convertible', 0, [
+      [2.0, -281],
+      [2.0, -284],
+    ]);
+    this.addVehicle(arcadeStall2, 0, idCounter++, createConvertibleTraffic, false, {
+      type: 'arcade_visitor_convertible',
+      name: 'Retro Roadster',
+      maxSpeed: 38,
+      acceleration: 21,
+      weight: 1.05,
+      cruiseScale: 0,
+      driverName: 'Arcade Champion',
+      noDriver: true,
+    });
+
+    const arcadeStall3 = this.route('arcade_carpark_suv', 0, [
+      [20.0, -281],
+      [20.0, -284],
+    ]);
+    this.addVehicle(arcadeStall3, 0, idCounter++, createSuvTraffic, false, {
+      type: 'arcade_visitor_suv',
+      name: 'Arcade Cruiser SUV',
+      maxSpeed: 34,
+      acceleration: 19,
+      weight: 1.5,
+      cruiseScale: 0,
+      driverName: 'Arcade Visitor',
+      noDriver: true,
+    });
 
     // Airport traffic is deliberately light: enough to make both approaches feel
     // connected without turning the terminal loop into a queue. Because the route

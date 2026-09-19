@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createMaterial, createSurfaceMaterial, createStableSidewalkMaterial, createGlassMaterial, createStylizedCityTreeModel } from './models';
 import {
+  ArcadeMachineInfo,
   DestructibleProp,
   GrassPatch,
   MapLandmark,
@@ -84,6 +85,7 @@ export interface GoldenrodBuildResult {
     }>;
   };
   landmarks: MapLandmark[];
+  arcadeMachines?: ArcadeMachineInfo[];
 }
 
 function enableInteriorFaces(group: THREE.Object3D) {
@@ -177,6 +179,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
   const destructibles: DestructibleProp[] = [];
   const grassPatches: GrassPatch[] = [];
   const landmarks: MapLandmark[] = [];
+  const arcadeMachines: ArcadeMachineInfo[] = [];
 
   // Materials for Japanese Pokémon City aesthetic (PS2/GameCube palette)
   const roadMat = createSurfaceMaterial(0x30343a, 'asphalt', 0.92, 0.03, 22, 22);
@@ -2766,6 +2769,24 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     });
   });
 
+  // Retro Coin-Op Arcade Machine inside Professor Oak's Research Lab
+  const oakArcadeCab = new THREE.Group();
+  oakArcadeCab.position.set(7.8, 0, 4.8);
+  const oakCabBody = new THREE.Mesh(new THREE.BoxGeometry(1.35, 2.2, 0.95), createMaterial(0x1a237e));
+  oakCabBody.position.y = 1.1;
+  const oakCabScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.62), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+  oakCabScreen.position.set(0, 1.45, 0.486);
+  const oakMarquee = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.35, 0.28), new THREE.MeshBasicMaterial({ color: 0xffd600 }));
+  oakMarquee.position.set(0, 2.25, 0.38);
+  oakArcadeCab.add(oakCabBody, oakCabScreen, oakMarquee);
+  markSolid(oakCabBody);
+  labGroup.add(oakArcadeCab);
+  arcadeMachines.push({
+    id: 'oak_lab_arcade',
+    name: "Professor Oak's Arcade",
+    position: new THREE.Vector3(labCenter.x + 7.8, 0.12, labCenter.z + 4.8),
+  });
+
   root.add(labGroup);
   landmarks.push({
     id: 'oak_lab',
@@ -3254,6 +3275,13 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
       const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.92, 0.62), new THREE.MeshBasicMaterial({ color: (row + col) % 2 ? 0x00e5ff : 0xff4dd2 }));
       screen.position.set(0, 1.42, 0.486);
       cab.add(body, screen); markSolid(body); gameCornerGroup.add(cab);
+
+      const gcCabWorldPos = new THREE.Vector3(150 - 6 + col * 4, 0.12, -60 - 4.7 + row * 4.2);
+      arcadeMachines.push({
+        id: `gc_arcade_${row}_${col}`,
+        name: `Game Corner Arcade Cabinet #${row * 4 + col + 1}`,
+        position: gcCabWorldPos,
+      });
     }
   }
 
@@ -4038,5 +4066,6 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
       elevators: towerElevators,
     },
     landmarks,
+    arcadeMachines,
   };
 }

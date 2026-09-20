@@ -63,3 +63,22 @@ html, body, #root {
     width: 100%;
   }
 }
+
+/* Simpsons Hit & Run Police Siren Flashing Animations */
+@keyframes police-siren-flash-red {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.95)); transform: scale(1.05); }
+  50% { opacity: 0.3; filter: drop-shadow(0 0 2px rgba(239, 68, 68, 0.2)); transform: scale(0.98); }
+}
+
+@keyframes police-siren-flash-blue {
+  0%, 100% { opacity: 0.3; filter: drop-shadow(0 0 2px rgba(59, 130, 246, 0.2)); transform: scale(0.98); }
+  50% { opacity: 1; filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.95)); transform: scale(1.05); }
+}
+
+.animate-siren-red {
+  animation: police-siren-flash-red 0.35s infinite alternate ease-in-out;
+}
+
+.animate-siren-blue {
+  animation: police-siren-flash-blue 0.35s infinite alternate ease-in-out;
+}

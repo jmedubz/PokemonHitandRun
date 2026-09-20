@@ -56,6 +56,7 @@ import {
   Search,
   Pause,
   Users,
+  Target,
 } from 'lucide-react';
 
 interface GameHUDProps {
@@ -742,6 +743,25 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         )}
 
+        {!hasChosenStarter && (
+          <div className="bg-slate-950/95 border-2 border-amber-400/90 rounded-xl px-3.5 py-2.5 shadow-[0_0_25px_rgba(251,191,36,0.4)] backdrop-blur-md text-white w-[290px] max-w-[34vw] animate-pulse">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <span className="text-[10px] uppercase tracking-[0.16em] font-black text-amber-300 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5 text-amber-400" /> Active Mission
+              </span>
+              <span className="text-[9px] font-black text-amber-950 bg-amber-400 px-1.5 py-0.5 rounded font-mono uppercase">
+                REQUIRED
+              </span>
+            </div>
+            <div className="text-xs font-black leading-tight text-amber-200">
+              Choose Your Starter Pokémon!
+            </div>
+            <div className="mt-1 text-[11px] leading-snug text-slate-300">
+              Walk up to Pikachu (⚡), Charmander (🔥), or Squirtle (💧) in Prof. Oak's Lab and press [E] to choose.
+            </div>
+          </div>
+        )}
+
         {hasChosenStarter && worldGoal && (
           <div className="bg-slate-950/90 border border-cyan-500/60 rounded-xl px-3 py-2.5 shadow-xl backdrop-blur-md text-white w-[270px] max-w-[32vw]">
             <div className="flex items-center justify-between gap-3 mb-1">
@@ -1329,22 +1349,30 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ---------------- SIX-SECOND TEMPORARY NOTIFICATION LANE ---------------- */}
       {temporaryNotification && (
         <div
-          className="absolute z-50 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-end"
-          style={temporaryNotificationStyle}
+          className={
+            controlMode === 'mobile'
+              ? "absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex justify-center w-[88vw] max-w-sm px-2"
+              : "absolute z-50 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-end"
+          }
+          style={controlMode === 'mobile' ? undefined : temporaryNotificationStyle}
         >
           <button
             key={temporaryNotification.id}
             type="button"
             onClick={onDismissTemporaryNotification}
-            className="hud-temporary-notification group relative pointer-events-auto w-fit max-w-[440px] min-w-[240px] bg-slate-950/95 border border-cyan-400/80 rounded-xl px-3.5 py-2.5 pr-9 shadow-[0_0_22px_rgba(34,211,238,0.25)] backdrop-blur-xl text-white text-left cursor-pointer hover:border-cyan-300 transition overflow-hidden"
+            className={`hud-temporary-notification group relative pointer-events-auto bg-slate-950/95 border border-cyan-400/90 rounded-xl px-3.5 py-2 shadow-[0_0_24px_rgba(34,211,238,0.35)] backdrop-blur-xl text-white cursor-pointer hover:border-cyan-300 transition overflow-hidden ${
+              controlMode === 'mobile'
+                ? 'w-full text-center py-2 px-6 pr-8'
+                : 'w-fit max-w-[440px] min-w-[240px] text-left pr-9'
+            }`}
             title="Click to close"
             aria-label={`Close notification from ${temporaryNotification.speaker}`}
           >
             <X className="absolute top-2.5 right-2.5 w-3.5 h-3.5 text-slate-400 group-hover:text-white transition" />
-            <div className="text-[10px] uppercase tracking-wider font-black text-cyan-300 mb-0.5">
+            <div className={`text-[10px] uppercase tracking-wider font-black text-cyan-300 mb-0.5 ${controlMode === 'mobile' ? 'text-center' : 'text-left'}`}>
               {temporaryNotification.speaker}
             </div>
-            <div className="text-xs sm:text-sm font-semibold leading-snug text-slate-100 break-words">
+            <div className={`text-xs sm:text-sm font-semibold leading-snug text-slate-100 break-words ${controlMode === 'mobile' ? 'text-center' : 'text-left'}`}>
               {temporaryNotification.text}
             </div>
             <div className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-cyan-300/80" />

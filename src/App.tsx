@@ -3776,8 +3776,8 @@ export default function App() {
       if (!e || !e.hasChosenStarter || e.deathSequenceActive || e.hospitalRecoveryActive || e.healingActive || e.switchAnimator.active) return;
 
       if (e.grabbedNpcId) {
-        // Do not release at button-down. Queue a real throw so the arms visibly
-        // pull back, swing through, and let go at the readable release frame.
+        // Prevent accidental instant throw right after grabbing (e.g. touch tap double-fire)
+        if (e.grabLiftTimer < 0.32) return;
         if (!e.grabThrowQueued) {
           e.grabThrowQueued = true;
           e.grabThrowPoseTimer = 0.62;
@@ -8158,11 +8158,23 @@ export default function App() {
         handleGrab();
       } else if (action === 'special') {
         performInstantSpecial();
+      } else if (action === 'chute_deploy') {
+        if (activeInputEngine.parachuteController && activeInputEngine.parachuteController.mode === 'freefall') {
+          if (activeInputEngine.parachuteController.deploy()) {
+            showTemporaryNotification('Parachute', 'Canopy deployed — CUT CHUTE drops back into freefall.');
+          }
+        }
       } else if (action === 'jump') {
-        keys['Space'] = true;
-        setTimeout(() => {
-          keys['Space'] = false;
-        }, 120);
+        if (activeInputEngine.parachuteController && activeInputEngine.parachuteController.mode === 'freefall') {
+          if (activeInputEngine.parachuteController.deploy()) {
+            showTemporaryNotification('Parachute', 'Canopy deployed — CUT CHUTE drops back into freefall.');
+          }
+        } else {
+          keys['Space'] = true;
+          setTimeout(() => {
+            keys['Space'] = false;
+          }, 120);
+        }
       } else if (action === 'sprint') {
         keys['ShiftLeft'] = !keys['ShiftLeft'];
       } else if (action === 'horn') {
@@ -12204,6 +12216,8 @@ export default function App() {
           wantedHeat={wantedHeat}
           hitAndRunActive={hitAndRunActive}
           treesGrownCount={treesGrownCount}
+          hasChosenStarter={hasChosenStarter}
+          worldGoal={worldGoal}
         />
       )}
 

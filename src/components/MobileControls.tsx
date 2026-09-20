@@ -19,12 +19,14 @@ import {
   ArrowLeft,
   ArrowRight,
   Disc,
+  Target,
 } from 'lucide-react';
 import {
   MapLandmark,
   WorldMapSnapshot,
   WorldMapRoadFeature,
   WorldMapAreaFeature,
+  WorldGoalView,
 } from '../types';
 
 const getAreaColor = (area: WorldMapAreaFeature): string => {
@@ -98,7 +100,7 @@ export interface MobileControlsProps {
   currentPokemonId: string;
   grabbedNpcId: string | null;
   interactionPrompt: string | null;
-  onAction: (action: 'attack' | 'grab' | 'special' | 'interact' | 'jump' | 'sprint' | 'horn' | 'chute_cut') => void;
+  onAction: (action: 'attack' | 'grab' | 'special' | 'interact' | 'jump' | 'sprint' | 'horn' | 'chute_deploy' | 'chute_cut') => void;
   onKeyChange: (code: string, isDown: boolean) => void;
   onAnalogMove?: (data: AnalogInputData) => void;
   onCameraDrag: (dx: number, dy: number) => void;
@@ -117,6 +119,8 @@ export interface MobileControlsProps {
   wantedHeat: number;
   hitAndRunActive: boolean;
   treesGrownCount: number;
+  hasChosenStarter?: boolean;
+  worldGoal?: WorldGoalView | null;
 }
 
 export const MobileControls: React.FC<MobileControlsProps> = ({
@@ -147,6 +151,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   wantedHeat,
   hitAndRunActive,
   treesGrownCount,
+  hasChosenStarter = false,
+  worldGoal = null,
 }) => {
   // Floating Dynamic Joystick state
   const [joystickActive, setJoystickActive] = useState(false);
@@ -411,6 +417,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   // ---------------------------------------------------------------------------
   // ACTION BUTTON PRESS HANDLERS
   // ---------------------------------------------------------------------------
+  const lastTouchTimeRef = useRef<number>(0);
   const createButtonHandlers = (
     onPress: () => void,
     onRelease?: () => void
@@ -418,6 +425,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
     return {
       onTouchStart: (e: React.TouchEvent) => {
         e.stopPropagation();
+        lastTouchTimeRef.current = Date.now();
         onPress();
       },
       onTouchEnd: (e: React.TouchEvent) => {
@@ -430,10 +438,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       },
       onMouseDown: (e: React.MouseEvent) => {
         e.stopPropagation();
+        // Ignore synthetic mouse events caused by recent touch taps
+        if (Date.now() - lastTouchTimeRef.current < 450) return;
         onPress();
       },
       onMouseUp: (e: React.MouseEvent) => {
         e.stopPropagation();
+        if (Date.now() - lastTouchTimeRef.current < 450) return;
         if (onRelease) onRelease();
       },
     };
@@ -550,108 +561,247 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         </div>
       )}
 
+      {/* ---------------- TOP MISSION BANNER (iPhone / Mobile) ---------------- */}
+      {!hasChosenStarter && (
+        <div className="absolute top-1.5 left-1/2 -translate-x-1/2 pointer-events-none z-40 w-[92vw] max-w-md">
+          <div className="rounded-2xl border-2 border-amber-400/95 bg-slate-950/95 px-3.5 py-1.5 text-center shadow-[0_0_24px_rgba(251,191,36,0.6)] backdrop-blur-md flex flex-col items-center justify-center animate-pulse">
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] font-black uppercase tracking-widest text-amber-300">
+              <Target className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>ACTIVE MISSION: CHOOSE YOUR POKÉMON</span>
+            </div>
+            <div className="mt-0.5 text-[10.5px] sm:text-xs font-bold text-white leading-tight">
+              Walk up to Pikachu (⚡), Charmander (🔥), or Squirtle (💧) in Prof. Oak's Lab & tap to select!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasChosenStarter && worldGoal && !worldGoal.completed && (
+        <div className="absolute top-1.5 left-1/2 -translate-x-1/2 pointer-events-none z-40 w-[88vw] max-w-sm">
+          <div className="rounded-xl border border-cyan-400/70 bg-slate-950/92 px-3 py-1 text-center shadow-lg backdrop-blur-md flex flex-col items-center justify-center">
+            <div className="flex items-center gap-1.5 text-[9.5px] font-black uppercase tracking-wider text-cyan-300">
+              <Target className="w-3 h-3 text-cyan-400 shrink-0" />
+              <span>MISSION:</span>
+              <span className="text-white">{worldGoal.title}</span>
+              <span className="text-cyan-400 font-mono">({worldGoal.completedCount}/{worldGoal.totalCount})</span>
+            </div>
+            <div className="text-[9.5px] font-medium text-slate-300 truncate max-w-full">
+              {worldGoal.description}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---------------- TOP BAR (Safe & Compact) ---------------- */}
       <div className="flex items-start justify-between w-full pointer-events-none z-30 relative">
         {/* Top-Left: Compact Minimap & Status */}
         <div className="flex items-start gap-2.5 pointer-events-auto">
-          {/* COMPACT MINIMAP: Tapping ONLY opens full map, NEVER teleports */}
-          <div
-            id="mobile-minimap-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenBigMap();
-            }}
-            className="relative rounded-2xl border border-emerald-400/50 bg-slate-950/85 p-1 shadow-lg backdrop-blur-md cursor-pointer group active:scale-95 transition-transform overflow-hidden"
-            style={{ width: `${miniMapSize + 8}px`, height: `${miniMapSize + 8}px` }}
-            title="Tap to open full world map"
-            role="button"
-            tabIndex={0}
-          >
+          {/* COMPACT MINIMAP: Simpsons Hit & Run Style with Outer Gauge & Police Siren */}
+          <div className="flex flex-col items-center">
             <div
-              className="relative rounded-xl overflow-hidden bg-[#243c2e] border border-slate-700/80"
-              style={{ width: `${miniMapSize}px`, height: `${miniMapSize}px` }}
+              id="mobile-minimap-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenBigMap();
+              }}
+              className="relative rounded-full border-2 border-slate-700/80 bg-slate-950 p-1.5 shadow-2xl backdrop-blur-md cursor-pointer group active:scale-95 transition-transform"
+              style={{ width: `${miniMapSize + 16}px`, height: `${miniMapSize + 16}px` }}
+              title="Tap to open full world map"
+              role="button"
+              tabIndex={0}
             >
+              {/* Police Siren Light Bar Fixture on Top (12 o'clock) */}
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center justify-center">
+                <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border-2 bg-slate-900 shadow-xl transition-all ${
+                  hitAndRunActive || wantedHeat > 85
+                    ? 'border-red-500 shadow-[0_0_16px_rgba(239,68,68,0.8)] scale-110'
+                    : wantedHeat > 0
+                    ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]'
+                    : 'border-slate-600/80 shadow-md'
+                }`}>
+                  {/* Left Blue Siren Light */}
+                  <div className={`w-3.5 h-3 rounded-l-full border ${
+                    wantedHeat > 0 || hitAndRunActive
+                      ? 'bg-blue-500 border-blue-300 animate-siren-blue'
+                      : 'bg-blue-900/60 border-blue-700/50'
+                  }`} />
+
+                  {/* Center Police Badge Cap */}
+                  <div className="w-3 h-3.5 rounded-sm bg-gradient-to-b from-slate-100 to-slate-300 border border-slate-400 flex items-center justify-center shadow-inner">
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 border border-amber-600" />
+                  </div>
+
+                  {/* Right Red Siren Light */}
+                  <div className={`w-3.5 h-3 rounded-r-full border ${
+                    wantedHeat > 0 || hitAndRunActive
+                      ? 'bg-red-500 border-red-300 animate-siren-red'
+                      : 'bg-red-900/60 border-red-700/50'
+                  }`} />
+                </div>
+              </div>
+
+              {/* Outer Hit & Run Circular Ring Gauge (Simpsons Hit & Run Style) */}
               <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                viewBox={`${miniMinX} ${miniMinZ} ${miniWorldWidth} ${miniWorldHeight}`}
-                preserveAspectRatio="none"
+                className="absolute inset-0 w-full h-full pointer-events-none z-20"
+                viewBox="0 0 116 116"
               >
-                <rect x={miniMinX} y={miniMinZ} width={miniWorldWidth} height={miniWorldHeight} fill="#243c2e" />
-                {(worldMap?.areas ?? []).map((area) => {
-                  if (area.radius) {
-                    return (
-                      <circle
-                        key={`m_mini_area_${area.id}`}
-                        cx={area.x}
-                        cy={area.z}
-                        r={area.radius}
-                        fill={getAreaColor(area)}
-                        opacity={0.8}
-                      />
-                    );
-                  }
-                  return (
-                    <rect
-                      key={`m_mini_area_${area.id}`}
-                      x={area.x - area.width * 0.5}
-                      y={area.z - area.depth * 0.5}
-                      width={area.width}
-                      height={area.depth}
-                      fill={getAreaColor(area)}
-                      opacity={area.kind === 'water' ? 0.8 : 0.65}
-                    />
-                  );
-                })}
-                {(worldMap?.roads ?? []).map((road) => renderMiniRoad(road))}
+                {/* Background Dark Track */}
+                <circle
+                  cx="58"
+                  cy="58"
+                  r="52"
+                  fill="none"
+                  stroke="#0f172a"
+                  strokeWidth="8"
+                />
+                <circle
+                  cx="58"
+                  cy="58"
+                  r="52"
+                  fill="none"
+                  stroke="#334155"
+                  strokeWidth="5"
+                />
+
+                {/* Active Heat Gauge Fill Arc */}
+                {wantedHeat > 0 && (
+                  <circle
+                    cx="58"
+                    cy="58"
+                    r="52"
+                    fill="none"
+                    stroke={
+                      hitAndRunActive || wantedHeat > 85
+                        ? '#ef4444'
+                        : wantedHeat > 45
+                        ? '#f97316'
+                        : '#facc15'
+                    }
+                    strokeWidth="6"
+                    strokeDasharray="326.72"
+                    strokeDashoffset={326.72 - (wantedHeat / 100) * 326.72}
+                    strokeLinecap="round"
+                    style={{
+                      transform: 'rotate(-90deg)',
+                      transformOrigin: '58px 58px',
+                      transition: 'stroke-dashoffset 0.25s ease-out, stroke 0.25s ease',
+                      filter:
+                        hitAndRunActive || wantedHeat > 85
+                          ? 'drop-shadow(0 0 6px #ef4444)'
+                          : wantedHeat > 45
+                          ? 'drop-shadow(0 0 4px #f97316)'
+                          : 'drop-shadow(0 0 4px #facc15)',
+                    }}
+                  />
+                )}
+
+                {/* Bevel Notch Quadrant Ticks (12, 3, 6, 9 o'clock) */}
+                <line x1="58" y1="2" x2="58" y2="10" stroke="#cbd5e1" strokeWidth="2.5" />
+                <line x1="114" y1="58" x2="106" y2="58" stroke="#cbd5e1" strokeWidth="2.5" />
+                <line x1="58" y1="114" x2="58" y2="106" stroke="#cbd5e1" strokeWidth="2.5" />
+                <line x1="2" y1="58" x2="10" y2="58" stroke="#cbd5e1" strokeWidth="2.5" />
               </svg>
 
-              {/* Landmark pins - purely visual, pointer-events-none */}
-              {landmarks
-                .filter((lm) => Math.hypot(lm.x - playerPos.x, lm.z - playerPos.z) < miniWorldRadius)
-                .map((lm) => {
-                  const mPos = miniWorldToMap(lm.x, lm.z);
-                  return (
-                    <div
-                      key={`m_pin_${lm.id}`}
-                      className="absolute w-2 h-2 rounded-full border border-white/80 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10"
-                      style={{ left: `${mPos.x}px`, top: `${mPos.y}px`, backgroundColor: lm.color }}
-                    />
-                  );
-                })}
-
-              {/* Police positions */}
-              {policePositions
-                .filter((pos) => Math.hypot(pos.x - playerPos.x, pos.z - playerPos.z) < miniWorldRadius)
-                .map((pos, i) => {
-                  const pMap = miniWorldToMap(pos.x, pos.z);
-                  return (
-                    <div
-                      key={`m_cop_${i}`}
-                      className="absolute w-2 h-2 rounded-full bg-red-500 border border-white transform -translate-x-1/2 -translate-y-1/2 animate-pulse pointer-events-none z-10"
-                      style={{ left: `${pMap.x}px`, top: `${pMap.y}px` }}
-                    />
-                  );
-                })}
-
-              {/* Player Arrow */}
+              {/* Circular Minimap Inner Display */}
               <div
-                className="absolute w-3.5 h-3.5 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-20"
-                style={{ left: `${miniMapSize / 2}px`, top: `${miniMapSize / 2}px` }}
+                className="relative rounded-full overflow-hidden bg-[#243c2e] border border-slate-700/80 shadow-inner"
+                style={{ width: `${miniMapSize}px`, height: `${miniMapSize}px` }}
               >
-                <div
-                  className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[9px] border-b-yellow-300 drop-shadow-[0_0_4px_#facc15]"
-                  style={{ transform: `rotate(${mapRotation}rad)` }}
-                />
-              </div>
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox={`${miniMinX} ${miniMinZ} ${miniWorldWidth} ${miniWorldHeight}`}
+                  preserveAspectRatio="none"
+                >
+                  <rect x={miniMinX} y={miniMinZ} width={miniWorldWidth} height={miniWorldHeight} fill="#243c2e" />
+                  {(worldMap?.areas ?? []).map((area) => {
+                    if (area.radius) {
+                      return (
+                        <circle
+                          key={`m_mini_area_${area.id}`}
+                          cx={area.x}
+                          cy={area.z}
+                          r={area.radius}
+                          fill={getAreaColor(area)}
+                          opacity={0.8}
+                        />
+                      );
+                    }
+                    return (
+                      <rect
+                        key={`m_mini_area_${area.id}`}
+                        x={area.x - area.width * 0.5}
+                        y={area.z - area.depth * 0.5}
+                        width={area.width}
+                        height={area.depth}
+                        fill={getAreaColor(area)}
+                        opacity={area.kind === 'water' ? 0.8 : 0.65}
+                      />
+                    );
+                  })}
+                  {(worldMap?.roads ?? []).map((road) => renderMiniRoad(road))}
+                </svg>
 
-              {/* District Label */}
-              <div className="absolute top-0.5 left-1 text-[7px] font-black uppercase text-white/90 bg-black/60 px-1 py-0.2 rounded pointer-events-none">
-                {currentDistrict}
-              </div>
-              <div className="absolute bottom-0 inset-x-0 bg-black/75 text-[6.5px] font-bold text-center text-amber-300 py-0.2 pointer-events-none uppercase tracking-wider">
-                Tap for Map
+                {/* Landmark pins - purely visual, pointer-events-none */}
+                {landmarks
+                  .filter((lm) => Math.hypot(lm.x - playerPos.x, lm.z - playerPos.z) < miniWorldRadius)
+                  .map((lm) => {
+                    const mPos = miniWorldToMap(lm.x, lm.z);
+                    return (
+                      <div
+                        key={`m_pin_${lm.id}`}
+                        className="absolute w-2 h-2 rounded-full border border-white/80 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10"
+                        style={{ left: `${mPos.x}px`, top: `${mPos.y}px`, backgroundColor: lm.color }}
+                      />
+                    );
+                  })}
+
+                {/* Police positions */}
+                {policePositions
+                  .filter((pos) => Math.hypot(pos.x - playerPos.x, pos.z - playerPos.z) < miniWorldRadius)
+                  .map((pos, i) => {
+                    const pMap = miniWorldToMap(pos.x, pos.z);
+                    return (
+                      <div
+                        key={`m_cop_${i}`}
+                        className="absolute w-2 h-2 rounded-full bg-red-500 border border-white transform -translate-x-1/2 -translate-y-1/2 animate-pulse pointer-events-none z-10"
+                        style={{ left: `${pMap.x}px`, top: `${pMap.y}px` }}
+                      />
+                    );
+                  })}
+
+                {/* Player Arrow */}
+                <div
+                  className="absolute w-3.5 h-3.5 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none z-20"
+                  style={{ left: `${miniMapSize / 2}px`, top: `${miniMapSize / 2}px` }}
+                >
+                  <div
+                    className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[9px] border-b-yellow-300 drop-shadow-[0_0_4px_#facc15]"
+                    style={{ transform: `rotate(${mapRotation}rad)` }}
+                  />
+                </div>
+
+                {/* District Label */}
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[6.5px] font-black uppercase text-white/90 bg-black/70 px-1 py-0.2 rounded pointer-events-none whitespace-nowrap">
+                  {currentDistrict}
+                </div>
+                <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[6px] font-bold text-center text-amber-300 py-0.2 pointer-events-none uppercase tracking-wider">
+                  Tap for Map
+                </div>
               </div>
             </div>
+
+            {/* Hit & Run Heat Banner below minimap */}
+            {wantedHeat > 0 && (
+              <div className="mt-1 flex flex-col items-center pointer-events-none">
+                <div className={`px-2 py-0.5 rounded border text-[8px] font-black uppercase tracking-wider shadow-md ${
+                  hitAndRunActive || wantedHeat > 85
+                    ? 'bg-red-600 border-red-300 text-white animate-bounce shadow-[0_0_12px_rgba(239,68,68,0.8)]'
+                    : 'bg-amber-500/90 border-amber-200 text-slate-950 font-black'
+                }`}>
+                  {hitAndRunActive ? '🚨 HIT & RUN!' : `HIT & RUN ${Math.round(wantedHeat)}%`}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Compact HP & Water readout */}
@@ -683,24 +833,6 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             )}
           </div>
         </div>
-
-        {/* Top-Center: Wanted / Hit & Run Meter (Only when active/danger) */}
-        {wantedHeat > 0 && (
-          <div className="pointer-events-none flex flex-col items-center">
-            <div className={`flex items-center gap-2 rounded-full border px-3 py-1 backdrop-blur-md shadow-lg ${
-              hitAndRunActive
-                ? 'border-red-500 bg-red-950/85 text-red-200 animate-pulse'
-                : wantedHeat >= 75
-                ? 'border-orange-500 bg-orange-950/80 text-orange-200'
-                : 'border-yellow-400/50 bg-slate-950/80 text-yellow-300'
-            }`}>
-              <span className="text-[10px] font-black uppercase tracking-wider">
-                {hitAndRunActive ? '🚨 POLICE PURSUIT' : 'POLICE HEAT'}
-              </span>
-              <span className="font-black text-xs">{Math.round(wantedHeat)}%</span>
-            </div>
-          </div>
-        )}
 
         {/* Top-Right: Quick Action Icons (Mute, Reset, Pause) */}
         <div className="flex items-center gap-2 pointer-events-auto">
@@ -965,10 +1097,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                 <button
                   type="button"
                   id="btn-deploy-chute"
-                  {...createButtonHandlers(() => {
-                    setKey('Space', true);
-                    setTimeout(() => setKey('Space', false), 150);
-                  })}
+                  {...createButtonHandlers(() => onAction('chute_deploy'))}
                   className="w-20 h-20 rounded-full border-2 border-emerald-400 bg-emerald-500/40 active:bg-emerald-500/70 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white"
                 >
                   <Disc className="w-8 h-8 text-emerald-200" />

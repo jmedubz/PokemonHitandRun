@@ -541,6 +541,15 @@ export class PlayerMovement {
       while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
       while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
 
+      // Smoothly auto-rotate camera behind the character's movement direction so player doesn't have to rotate camera manually
+      let camDiff = this.yaw - updatedCameraAngle;
+      while (camDiff > Math.PI) camDiff -= Math.PI * 2;
+      while (camDiff < -Math.PI) camDiff += Math.PI * 2;
+      const cameraAutoFollowSpeed = 2.6;
+      updatedCameraAngle += camDiff * Math.min(clampedDt * cameraAutoFollowSpeed, 0.18);
+      while (updatedCameraAngle > Math.PI) updatedCameraAngle -= Math.PI * 2;
+      while (updatedCameraAngle < -Math.PI) updatedCameraAngle += Math.PI * 2;
+
       // Continuous speed curve:
       // - Near centre (mag 0.05-0.3): slow, precise micro-walk (1.6 - 3.5 m/s)
       // - Halfway (mag ~0.5): steady walk (~7.5 m/s)

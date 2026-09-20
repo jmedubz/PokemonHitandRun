@@ -61,26 +61,31 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
       }}
     >
       <div
-        className="w-[min(560px,calc(100vw-2rem))] rounded-3xl border-2 border-indigo-400/70 bg-slate-950/95 p-6 text-white shadow-[0_0_60px_rgba(99,102,241,0.25)]"
+        className="w-[min(560px,calc(100vw-1.5rem))] max-h-[92vh] overflow-y-auto rounded-3xl border-2 border-indigo-400/70 bg-slate-950/95 p-4 sm:p-6 text-white shadow-[0_0_60px_rgba(99,102,241,0.25)]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3 sm:pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/40">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 shrink-0">
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.25em] text-indigo-400 select-none">Multiplayer</div>
-              <div className="text-xl font-black tracking-tight select-none">Full World Online</div>
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.25em] text-indigo-400 select-none">Multiplayer</div>
+              <div className="text-lg sm:text-xl font-black tracking-tight select-none">Full World Online</div>
             </div>
           </div>
           <button
             type="button"
             id="btn-close-multiplayer-modal"
             onClick={onClose}
-            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white select-none cursor-pointer"
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="min-h-[44px] min-w-[44px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300 transition hover:bg-slate-800 hover:text-white select-none cursor-pointer flex items-center justify-center"
           >
             Close (ESC)
           </button>
@@ -108,7 +113,12 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   type="button"
                   id="btn-copy-room-code"
                   onClick={handleCopyCode}
-                  className="flex items-center gap-1 rounded-xl border border-indigo-400/60 bg-indigo-500/20 px-3 py-1.5 text-xs font-bold text-indigo-200 transition hover:bg-indigo-500/30 select-none cursor-pointer"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleCopyCode();
+                  }}
+                  className="min-h-[44px] flex items-center gap-1 rounded-xl border border-indigo-400/60 bg-indigo-500/20 px-3.5 py-2 text-xs font-bold text-indigo-200 transition hover:bg-indigo-500/30 select-none cursor-pointer"
                   title="Copy Room Code"
                 >
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -167,7 +177,12 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 type="button"
                 id="btn-resume-multiplayer"
                 onClick={onClose}
-                className="flex-1 flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/60 bg-emerald-500/20 py-3.5 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/30 select-none cursor-pointer"
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                }}
+                className="min-h-[44px] flex-1 flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/60 bg-emerald-500/20 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-500/30 select-none cursor-pointer"
               >
                 <Play className="h-4 w-4" />
                 <span>Resume Game</span>
@@ -176,7 +191,12 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 type="button"
                 id="btn-leave-multiplayer"
                 onClick={onLeaveRoom}
-                className="flex items-center justify-center gap-2 rounded-2xl border border-rose-500/40 bg-rose-500/15 px-5 py-3.5 text-sm font-black text-rose-300 transition hover:bg-rose-500/25 select-none cursor-pointer"
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onLeaveRoom();
+                }}
+                className="min-h-[44px] flex items-center justify-center gap-2 rounded-2xl border border-rose-500/40 bg-rose-500/15 px-5 py-3 text-sm font-black text-rose-300 transition hover:bg-rose-500/25 select-none cursor-pointer"
               >
                 <LogOut className="h-4 w-4" />
                 <span>Leave</span>
@@ -192,7 +212,11 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 type="button"
                 id="tab-multiplayer-host"
                 onClick={() => setTab('host')}
-                className={`rounded-xl py-2 text-xs font-black transition cursor-pointer ${
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  setTab('host');
+                }}
+                className={`min-h-[44px] rounded-xl py-2.5 text-xs font-black transition cursor-pointer flex items-center justify-center ${
                   tab === 'host' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -202,7 +226,11 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                 type="button"
                 id="tab-multiplayer-join"
                 onClick={() => setTab('join')}
-                className={`rounded-xl py-2 text-xs font-black transition cursor-pointer ${
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  setTab('join');
+                }}
+                className={`min-h-[44px] rounded-xl py-2.5 text-xs font-black transition cursor-pointer flex items-center justify-center ${
                   tab === 'join' ? 'bg-indigo-600 text-white shadow' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -250,7 +278,13 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   type="submit"
                   id="btn-create-multiplayer-room"
                   disabled={mpState.isConnecting}
-                  className="w-full rounded-2xl border border-indigo-400/60 bg-indigo-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-indigo-500 disabled:opacity-50 select-none cursor-pointer"
+                  onTouchEnd={(e) => {
+                    if (!mpState.isConnecting) {
+                      e.preventDefault();
+                      handleCreate(e);
+                    }
+                  }}
+                  className="min-h-[44px] w-full rounded-2xl border border-indigo-400/60 bg-indigo-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-indigo-500 disabled:opacity-50 select-none cursor-pointer flex items-center justify-center"
                 >
                   {mpState.isConnecting ? 'Creating Room…' : 'Create Room & Host'}
                 </button>
@@ -315,7 +349,13 @@ export const MultiplayerModal: React.FC<MultiplayerModalProps> = ({
                   type="submit"
                   id="btn-join-multiplayer-room"
                   disabled={mpState.isConnecting || !joinCode.trim()}
-                  className="w-full rounded-2xl border border-emerald-400/60 bg-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-emerald-500 disabled:opacity-50 select-none cursor-pointer"
+                  onTouchEnd={(e) => {
+                    if (!mpState.isConnecting && joinCode.trim()) {
+                      e.preventDefault();
+                      handleJoin(e);
+                    }
+                  }}
+                  className="min-h-[44px] w-full rounded-2xl border border-emerald-400/60 bg-emerald-600 px-5 py-3.5 text-sm font-black text-white shadow-lg transition hover:bg-emerald-500 disabled:opacity-50 select-none cursor-pointer flex items-center justify-center"
                 >
                   {mpState.isConnecting ? 'Connecting…' : 'Join Session'}
                 </button>

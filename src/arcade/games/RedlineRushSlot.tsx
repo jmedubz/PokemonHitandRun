@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ArcadeGameProps } from '../types';
+import { X } from 'lucide-react';
 
 export const RedlineRushSlot: React.FC<ArcadeGameProps> = ({ onExit, machineName }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -53,11 +54,18 @@ export const RedlineRushSlot: React.FC<ArcadeGameProps> = ({ onExit, machineName
 
       <button
         type="button"
+        id="btn-exit-redline-rush"
         onClick={onExit}
-        className="absolute z-[100] top-3 left-1/2 -translate-x-1/2 rounded-lg border border-white/30 bg-black/75 px-4 py-2 text-xs font-black tracking-wider text-white shadow-lg backdrop-blur-sm transition hover:bg-black/90"
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onExit();
+        }}
+        className="absolute z-[100] top-3 right-4 min-h-[44px] rounded-xl border border-rose-400/60 bg-rose-950/85 hover:bg-rose-900 active:bg-rose-800 px-3.5 py-2 text-xs font-black tracking-wider text-rose-100 shadow-[0_0_15px_rgba(225,29,72,0.4)] backdrop-blur-md transition flex items-center gap-1.5 cursor-pointer"
         aria-label="Exit Redline Rush and return to the arcade"
       >
-        EXIT ARCADE
+        <X className="w-4 h-4 text-rose-300" />
+        <span>EXIT ARCADE</span>
       </button>
     </div>
   );

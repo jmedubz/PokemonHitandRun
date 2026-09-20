@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArcadeGameProps } from '../types';
-import { Volume2, VolumeX, RotateCcw, Award, Play } from 'lucide-react';
+import { Volume2, VolumeX, RotateCcw, X, ArrowLeft, ArrowRight, Zap } from 'lucide-react';
 
 interface Invader {
   x: number;
@@ -35,6 +35,9 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
   const [wave, setWave] = useState(1);
   const [gameOver, setGameOver] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
+  const soundMutedRef = useRef(false);
+  soundMutedRef.current = soundMuted;
+  const keysRef = useRef<Record<string, boolean>>({});
 
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -154,15 +157,17 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
     initGameRef.current = resetGame;
     setupWave(1);
 
-    const keys: Record<string, boolean> = {};
     const onKeyDown = (e: KeyboardEvent) => {
-      keys[e.code] = true;
+      keysRef.current[e.code] = true;
       if (e.code === 'KeyR' && gameOver) {
         resetGame();
       }
+      if (e.code === 'Escape') {
+        onExit();
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      keys[e.code] = false;
+      keysRef.current[e.code] = false;
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -184,6 +189,7 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
       }
 
       if (!gameOver) {
+        const keys = keysRef.current;
         // Player movement
         if (keys['KeyA'] || keys['ArrowLeft']) {
           playerX = Math.max(25, playerX - playerSpeed * dt);
@@ -434,55 +440,104 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
   }, [gameOver, soundMuted]);
 
   return (
-    <div className="w-full h-full flex flex-col bg-slate-950 text-white font-mono select-none">
+    <div className="w-full h-full flex flex-col bg-slate-950 text-white font-mono select-none overflow-y-auto">
       {/* Marquee Header */}
-      <div className="bg-gradient-to-r from-blue-950 via-indigo-900 to-purple-950 border-b-2 border-cyan-400 px-6 py-3 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-4">
-          <h1 className="text-xl font-black text-cyan-300 tracking-wider">
-            GALAXY DEFENDER <span className="text-xs text-cyan-400 border border-cyan-400 px-2 py-0.5 rounded ml-2">1983 ARCADE</span>
+      <div className="bg-gradient-to-r from-blue-950 via-indigo-900 to-purple-950 border-b-2 border-cyan-400 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between shadow-lg shrink-0">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <h1 className="text-sm sm:text-xl font-black text-cyan-300 tracking-wider">
+            GALAXY DEFENDER <span className="hidden xs:inline text-[10px] text-cyan-400 border border-cyan-400 px-1.5 py-0.5 rounded ml-1">1983</span>
           </h1>
-          <div className="hidden sm:flex items-center gap-6 text-xs text-slate-300">
+          <div className="flex items-center gap-3 sm:gap-6 text-[10px] sm:text-xs text-slate-300">
             <div>SCORE: <span className="text-amber-300 font-bold">{score}</span></div>
-            <div>HIGH: <span className="text-emerald-400 font-bold">{highScore}</span></div>
-            <div>SHIPS: <span className="text-rose-400 font-bold">{'▲ '.repeat(Math.max(0, lives))}</span></div>
-            <div>WAVE: <span className="text-purple-300 font-bold">{wave}</span></div>
+            <div>SHIPS: <span className="text-rose-400 font-bold">{'▲'.repeat(Math.max(0, lives))}</span></div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <button
             onClick={() => setSoundMuted(!soundMuted)}
-            className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs flex items-center gap-1 text-slate-300"
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              setSoundMuted(!soundMuted);
+            }}
+            className="min-h-[40px] min-w-[40px] p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs flex items-center justify-center text-slate-300 cursor-pointer"
+            title="Toggle Audio"
           >
             {soundMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
           </button>
           <button
             onClick={() => initGameRef.current()}
-            className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-xs font-bold transition flex items-center gap-1"
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              initGameRef.current();
+            }}
+            className="min-h-[40px] px-3 py-1.5 rounded-xl bg-cyan-700 hover:bg-cyan-600 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset</span>
           </button>
           <button
             onClick={onExit}
-            className="px-4 py-1.5 rounded bg-rose-700 hover:bg-rose-600 text-xs font-bold transition"
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onExit();
+            }}
+            className="min-h-[44px] min-w-[44px] px-3 sm:px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-black transition flex items-center gap-1 cursor-pointer shadow-[0_0_15px_rgba(225,29,72,0.5)]"
+            title="Exit Arcade Cabinet"
           >
-            Exit (Esc)
+            <X className="w-4 h-4" />
+            <span>Exit</span>
           </button>
         </div>
       </div>
 
       {/* Screen Area */}
-      <div className="flex-1 flex items-center justify-center p-4 bg-slate-900/50">
-        <div className="relative border-4 border-slate-700 rounded-xl overflow-hidden shadow-2xl bg-black">
-          <canvas ref={canvasRef} width={560} height={520} className="block cursor-crosshair" />
+      <div className="flex-1 flex flex-col items-center justify-center p-2 sm:p-4 bg-slate-900/50 min-h-0">
+        <div className="relative border-4 border-slate-700 rounded-xl overflow-hidden shadow-2xl bg-black max-w-full max-h-[55vh] aspect-[14/13]">
+          <canvas ref={canvasRef} width={560} height={520} className="w-full h-full block cursor-crosshair object-contain" />
+        </div>
+
+        {/* On-Screen Mobile Controls */}
+        <div className="mt-2.5 flex items-center justify-between w-full max-w-sm px-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onPointerDown={() => { keysRef.current['KeyA'] = true; }}
+              onPointerUp={() => { keysRef.current['KeyA'] = false; }}
+              onPointerLeave={() => { keysRef.current['KeyA'] = false; }}
+              className="w-13 h-13 rounded-2xl border-2 border-cyan-400/70 bg-cyan-600/30 active:bg-cyan-500/70 text-white flex items-center justify-center shadow-lg cursor-pointer select-none"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+            <button
+              type="button"
+              onPointerDown={() => { keysRef.current['KeyD'] = true; }}
+              onPointerUp={() => { keysRef.current['KeyD'] = false; }}
+              onPointerLeave={() => { keysRef.current['KeyD'] = false; }}
+              className="w-13 h-13 rounded-2xl border-2 border-cyan-400/70 bg-cyan-600/30 active:bg-cyan-500/70 text-white flex items-center justify-center shadow-lg cursor-pointer select-none"
+            >
+              <ArrowRight className="w-6 h-6" />
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onPointerDown={() => { keysRef.current['Space'] = true; }}
+            onPointerUp={() => { keysRef.current['Space'] = false; }}
+            onPointerLeave={() => { keysRef.current['Space'] = false; }}
+            className="w-15 h-15 rounded-full border-2 border-rose-400/80 bg-rose-600/40 active:bg-rose-500/80 text-white flex flex-col items-center justify-center shadow-xl cursor-pointer select-none"
+          >
+            <Zap className="w-5 h-5 text-yellow-300" />
+            <span className="text-[8px] font-black">FIRE</span>
+          </button>
         </div>
       </div>
 
       {/* Footer Controls Bar */}
-      <div className="bg-slate-900 border-t border-slate-800 px-6 py-2 flex items-center justify-between text-xs text-slate-400">
-        <div>CONTROLS: [A / D / Arrow Keys] Move • [Space / J] Plasma Laser • [Esc] Exit Machine</div>
-        <div className="text-cyan-400 font-bold">CREDIT 01 • INSERT COIN</div>
+      <div className="bg-slate-900 border-t border-slate-800 px-4 sm:px-6 py-2 flex items-center justify-between text-[11px] sm:text-xs text-slate-400 shrink-0">
+        <div>[A / D / Buttons] Move • [Space / Fire] Plasma • [X / Esc] Exit</div>
+        <div className="text-cyan-400 font-bold hidden xs:block">CREDIT 01</div>
       </div>
     </div>
   );

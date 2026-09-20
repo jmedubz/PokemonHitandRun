@@ -2343,11 +2343,11 @@ export class NPCManager {
     // Vector's "OH YEAHHH!" gets an actual celebratory body move instead of a
     // static speech bubble. The timer is handled in update() and restores every
     // animated transform cleanly when it finishes.
-    if (npc.id === 'brainrot_tung_tung_sahur') playSoundEffect('brainrotTung');
-    else if (npc.id === 'brainrot_ballerina_cappuccina') playSoundEffect('brainrotDance');
-    else if (npc.id === 'brainrot_cappuccino_assassino') playSoundEffect('brainrotNinja');
-    else if (npc.id === 'brainrot_bombardiro_crocodilo') playSoundEffect('brainrotFly');
-    else if (npc.id.startsWith('brainrot_')) playSoundEffect('brainrotWeird');
+    if (npc.id === 'brainrot_tung_tung_sahur') playSoundEffect('brainrotTung', npc.mesh.position);
+    else if (npc.id === 'brainrot_ballerina_cappuccina') playSoundEffect('brainrotDance', npc.mesh.position);
+    else if (npc.id === 'brainrot_cappuccino_assassino') playSoundEffect('brainrotNinja', npc.mesh.position);
+    else if (npc.id === 'brainrot_bombardiro_crocodilo') playSoundEffect('brainrotFly', npc.mesh.position);
+    else if (npc.id.startsWith('brainrot_')) playSoundEffect('brainrotWeird', npc.mesh.position);
 
     if (npc.id === 'cameo_vector' && /OH YEAHHH/i.test(text) && !this.isPedestrianTransitCritical(npc)) {
       npc.mesh.userData.vectorCelebrateTimer = 1.35;
@@ -2542,7 +2542,7 @@ export class NPCManager {
         power: profile.kind === 'force' ? 10 : 12,
       });
     }
-    playSoundEffect(sound);
+    playSoundEffect(sound, source.mesh.position);
   }
 
   private performPowerAttackOnPlayer(npc: NPC, profile: PowerProfile, playerPos: THREE.Vector3, now: number) {
@@ -2621,7 +2621,7 @@ export class NPCManager {
         power: profile.kind === 'force' ? 11 : 13,
       });
     }
-    playSoundEffect(sound);
+    playSoundEffect(sound, npc.mesh.position);
     this.playerPowerEffectHandler({ damage, impulse, reason, slowSeconds: slowSeconds || undefined });
   }
 
@@ -2648,7 +2648,7 @@ export class NPCManager {
     npc.mesh.userData.spiderWebTrailTimer = 0;
     npc.state = 'power_swing';
     npc.mesh.userData.powerCooldown = 8 + Math.random() * 6;
-    playSoundEffect('powerWeb');
+    playSoundEffect('powerWeb', npc.mesh.position);
     return true;
   }
 
@@ -2843,7 +2843,7 @@ export class NPCManager {
           npc.mesh.userData.ironFlightState = 'landing';
           npc.mesh.userData.ironLandingTarget = landing;
           npc.mesh.userData.ironTransitionStartY = npc.mesh.position.y;
-          playSoundEffect('powerRepulsor');
+          playSoundEffect('powerRepulsor', npc.mesh.position);
         } else {
           // No clear landing yet. Keep flying briefly and try again rather than clipping down.
           npc.mesh.userData.ironLandAt = now + 1.5;
@@ -2929,7 +2929,7 @@ export class NPCManager {
       if (this.canTraverseCharacterPath(npc, npc.mesh.position, takeoffTarget, radius, height, true, true)) {
         npc.mesh.userData.ironFlightState = 'takeoff';
         npc.mesh.userData.ironFlightCenter = npc.mesh.position.clone();
-        playSoundEffect('powerRepulsor');
+        playSoundEffect('powerRepulsor', npc.mesh.position);
         return true;
       }
       // Roof/awning/nearby body blocking the takeoff: just keep walking and retry later.
@@ -3003,19 +3003,19 @@ export class NPCManager {
         const prop = npc.mesh.getObjectByName('signature_prop');
         if (prop) npc.mesh.userData.powerAnimationBaseZ = prop.rotation.z;
         this.spawnPowerRing(npc.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)), profile.color, 0.9);
-        playSoundEffect('powerBlade');
+        playSoundEffect('powerBlade', npc.mesh.position);
       } else if (profile.kind === 'iron_man') {
         this.spawnPowerRing(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)), profile.color, 0.8);
-        playSoundEffect('powerRepulsor');
+        playSoundEffect('powerRepulsor', npc.mesh.position);
       } else if (profile.kind === 'ice') {
         this.spawnPowerRing(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.5, 0)), profile.color, 0.8);
-        playSoundEffect('powerIce');
+        playSoundEffect('powerIce', npc.mesh.position);
       } else if (profile.kind === 'sonic_dash') {
         this.spawnPowerRing(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.45, 0)), profile.color, 0.9);
-        playSoundEffect('powerDash');
+        playSoundEffect('powerDash', npc.mesh.position);
       } else {
         this.spawnPowerRing(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.8, 0)), profile.color, 0.85);
-        playSoundEffect(profile.kind === 'fire_breath' ? 'fire' : 'powerEnergy');
+        playSoundEffect(profile.kind === 'fire_breath' ? 'fire' : 'powerEnergy', npc.mesh.position);
       }
       npc.mesh.userData.powerCooldown = Math.max(3.5, profile.cooldown * 0.72);
       return false;
@@ -3138,7 +3138,7 @@ export class NPCManager {
           phase = 'takeoff';
           npc.mesh.userData.ashDefenderPhase = phase;
           npc.mesh.userData.ashDefenderPhaseTimer = 0.85;
-          playSoundEffect('powerEnergy');
+          playSoundEffect('powerEnergy', npc.mesh.position);
         } else {
           npc.mesh.userData.ashDefenderPhaseTimer = 0.7;
         }
@@ -4114,7 +4114,7 @@ export class NPCManager {
         if (wallImpact && Number(npc.mesh.userData.wallImpactCooldown ?? 0) <= 0) {
           npc.mesh.userData.wallImpactCooldown = 0.18;
           this.spawnImpactBurst(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0)), 0xffffff, 0.7);
-          playSoundEffect('crash');
+          playSoundEffect('crash', npc.mesh.position);
         }
         npc.mesh.userData.wallImpactCooldown = Math.max(0, Number(npc.mesh.userData.wallImpactCooldown ?? 0) - dt);
         npc.kickedVelocity.y = Math.max(-28, npc.kickedVelocity.y - 22 * dt);
@@ -4152,7 +4152,7 @@ export class NPCManager {
             npc.kickedVelocity.y = Math.min(6.5, downwardSpeed * 0.30);
             npc.kickedVelocity.x *= 0.58;
             npc.kickedVelocity.z *= 0.58;
-            playSoundEffect('crash');
+            playSoundEffect('crash', npc.mesh.position);
           } else {
             npc.kickedVelocity.set(0, 0, 0);
             npc.mesh.userData.bounceCount = 0;
@@ -4725,7 +4725,7 @@ export class NPCManager {
       }
       npc.mesh.userData.pendingKnockout = preserveKnockout;
       this.spawnImpactBurst(contact, 0xffd36a, Math.min(1.15, 0.58 + impactScore * 0.035));
-      if (impactScore >= 7.5) playSoundEffect('crash');
+      if (impactScore >= 7.5) playSoundEffect('crash', contact);
       return impactScore >= 10.5 ? 'knockdown' : 'fall';
     }
 
@@ -4768,7 +4768,7 @@ export class NPCManager {
     this.launchNPC(npc, direction, horizontalForce, verticalForce);
     npc.mesh.userData.pendingKnockout = false;
     this.spawnImpactBurst(contact, high ? 0xffc34d : 0xffd977, high ? 1.18 : 0.90);
-    playSoundEffect(high ? 'crash' : 'kick');
+    playSoundEffect(high ? 'crash' : 'kick', contact);
     if (Number(npc.mesh.userData.secondaryImpactSpeechAt ?? 0) <= now) {
       npc.mesh.userData.secondaryImpactSpeechAt = now + 2.6;
       this.say(npc, high ? ['OOF—!', 'I GOT HIT BY A PERSON?!', 'NOT THE CHAIN REACTION!'][Math.floor(Math.random() * 3)] : 'WHOA!', high ? 1.55 : 1.1);
@@ -5021,7 +5021,7 @@ export class NPCManager {
     if (knockedOut) this.markDeadBody(npc);
     npc.mesh.userData.pendingKnockout = knockedOut;
 
-    if (options.playImpactSound !== false) playSoundEffect('kick');
+    if (options.playImpactSound !== false) playSoundEffect('kick', npc.mesh.position);
     this.spawnImpactBurst(
       npc.mesh.position.clone().add(new THREE.Vector3(0, 1.15, 0)),
       options.color ?? 0xffd54f,

@@ -57,6 +57,9 @@ import { DEFAULT_WORLD_PROGRESS, loadGameSave, saveGame } from './game/saveGame'
 import { OAK_LAB_NEW_GAME_START } from './game/spawnPoints';
 import { playSoundEffect, soundManager } from './game/audio';
 import { GameHUD } from './components/GameHUD';
+import { MobileControls, AnalogInputData } from './components/MobileControls';
+import { PortraitRotateOverlay } from './components/PortraitRotateOverlay';
+import { Smartphone, Monitor, X } from 'lucide-react';
 import { disposeTransientObject3D } from './game/dispose';
 import { MultiplayerManager, MultiplayerClientState } from './game/multiplayerManager';
 import { MultiplayerModal } from './components/MultiplayerModal';
@@ -132,7 +135,7 @@ type DeveloperDebugSnapshot = {
   camera: { x: number; y: number; z: number };
   cameraToPlayer: number;
   district: string;
-  roots: { goldenrod: boolean; springfield: boolean; airport: boolean; airportCore: boolean; highway: boolean };
+  roots: { goldenrod: boolean; springfield: boolean; airport: boolean; airportCore: boolean; highway: boolean; arcade?: boolean };
   npcs: { visible: number; total: number };
   vehicles: { visible: number; total: number };
   props: { awake: number; total: number; substeps: number };
@@ -635,6 +638,44 @@ export default function App() {
   const [showAshVictory, setShowAshVictory] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
+
+  const [controlMode, setControlMode] = useState<'pc' | 'mobile'>(() => {
+    if (typeof window === 'undefined') return 'pc';
+    const saved = localStorage.getItem('pokemon_hit_and_run_control_mode');
+    if (saved === 'pc' || saved === 'mobile') return saved;
+    const isTouchOrMobile =
+      'ontouchstart' in window ||
+      navigator.maxTouchPoints > 0 ||
+      /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    return isTouchOrMobile ? 'mobile' : 'pc';
+  });
+
+  const [isPortrait, setIsPortrait] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerHeight > window.innerWidth;
+  });
+
+  const [showBigMap, setShowBigMap] = useState(false);
+  const [charizardFlightActive, setCharizardFlightActive] = useState(false);
+  const [grabbedNpcId, setGrabbedNpcId] = useState<string | null>(null);
+
+  const mobileKeyChangeRef = useRef<(code: string, isDown: boolean) => void>(() => {});
+  const mobileAnalogMoveRef = useRef<(data: AnalogInputData) => void>(() => {});
+  const analogInputStateRef = useRef<AnalogInputData>({ active: false, x: 0, y: 0, magnitude: 0, angle: 0 });
+  const mobileCameraDragRef = useRef<(dx: number, dy: number) => void>(() => {});
+  const mobileActionRef = useRef<(action: 'attack' | 'grab' | 'special' | 'interact' | 'jump' | 'sprint' | 'horn' | 'chute_cut') => void>(() => {});
+
+  useEffect(() => {
+    const handleOrientationCheck = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    window.addEventListener('resize', handleOrientationCheck);
+    window.addEventListener('orientationchange', handleOrientationCheck);
+    return () => {
+      window.removeEventListener('resize', handleOrientationCheck);
+      window.removeEventListener('orientationchange', handleOrientationCheck);
+    };
+  }, []);
   const showMultiplayerModalRef = useRef(false);
   useEffect(() => {
     showMultiplayerModalRef.current = showMultiplayerModal;
@@ -877,7 +918,7 @@ export default function App() {
 
     const initialW = Math.max(mountRef.current.clientWidth || window.innerWidth || 800, 320);
     const initialH = Math.max(mountRef.current.clientHeight || window.innerHeight || 600, 240);
-    const camera = new THREE.PerspectiveCamera(60, initialW / initialH, 0.35, 980);
+    const camera = new THREE.PerspectiveCamera(60, initialW / initialH, 0.35, 330);
     camera.position.set(200, 6, -174);
 
     const renderer = new THREE.WebGLRenderer({
@@ -950,7 +991,7 @@ export default function App() {
       sunStrength: { value: 0.72 },
     };
     const skyDome = new THREE.Mesh(
-      new THREE.SphereGeometry(420, 30, 18),
+      new THREE.SphereGeometry(180, 24, 14),
       new THREE.ShaderMaterial({
         uniforms: skyUniforms,
         side: THREE.BackSide,
@@ -2340,6 +2381,7 @@ export default function App() {
     collectDetailMeshes(springfield.group);
     collectDetailMeshes(highway.group);
     collectDetailMeshes(airport.group);
+    collectDetailMeshes(arcadeBuilding.group);
 
     // ---------------------------------------------------------------------
     // SAVE / STARTER STATE
@@ -6455,7 +6497,7 @@ export default function App() {
         vehicle.speed = 0;
         vehicle.mesh.rotation.z += (Math.random() < 0.5 ? -1 : 1) * 0.10;
         particles.emitSteam(vehicle.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)));
-        playSoundEffect('crash');
+        playSoundEffect('crash', vehicle.mesh.position);
         if (vehicle === engine.activeVehicle && engine.activeCarPhysics) {
           engine.activeCarPhysics.speed = 0;
           engine.activeCarPhysics.maxSpeed = 0;
@@ -6716,7 +6758,7 @@ export default function App() {
             THREE.MathUtils.clamp((result.relativeNormalSpeed - 3.5) * 0.24, 0.6, 20),
             result.contactPoint,
           );
-          playSoundEffect('crash');
+          playSoundEffect('crash', result.contactPoint);
         }
         engine.cameraShake = Math.max(engine.cameraShake, THREE.MathUtils.clamp(result.relativeNormalSpeed * 0.008, 0.03, 0.42));
         storeVehicleFramePosition(vehicle);
@@ -6753,7 +6795,7 @@ export default function App() {
         applyVehicleDamage(a, THREE.MathUtils.clamp((impact - 6.5) * 0.15 * Math.sqrt(massB / massA), 0.7, 18), result.contactPoint);
         applyVehicleDamage(b, THREE.MathUtils.clamp((impact - 6.0) * 0.18 * Math.sqrt(massA / massB), 0.8, 24), result.contactPoint);
       }
-      if (impact > 2.3) playSoundEffect('crash');
+      if (impact > 2.3) playSoundEffect('crash', result.contactPoint);
       if (playerInvolved) {
         engine.cameraShake = Math.max(engine.cameraShake, THREE.MathUtils.clamp((impact - 1.5) * 0.009, 0.025, 0.52));
         if (!b.isPolice && impact > 8) addWanted(impact > 28 ? 1.15 : 0.65);
@@ -6862,7 +6904,7 @@ export default function App() {
           block.mesh.rotation.z += (Math.random() - 0.5) * 0.18;
           applyVehicleDamage(engine.activeVehicle, THREE.MathUtils.clamp(impact * 0.24, 4, 20), cp.position);
           engine.cameraShake = Math.max(engine.cameraShake, 0.34);
-          playSoundEffect('crash');
+          playSoundEffect('crash', cp.position);
         }
       }
     };
@@ -7153,7 +7195,7 @@ export default function App() {
             if (result.relativeNormalSpeed > 7.5) {
               applyVehicleDamage(activeVehicle, THREE.MathUtils.clamp((result.relativeNormalSpeed - 6.5) * 0.18, 0.8, 20), result.contactPoint);
             }
-            if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash');
+            if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash', result.contactPoint);
             engine.cameraShake = Math.max(engine.cameraShake, THREE.MathUtils.clamp(result.relativeNormalSpeed * 0.009, 0.025, 0.5));
             copBody = makePoliceCollisionBody(cop);
           }
@@ -7173,7 +7215,7 @@ export default function App() {
           if (result.relativeNormalSpeed > 7.5) {
             applyVehicleDamage(vehicle, THREE.MathUtils.clamp((result.relativeNormalSpeed - 6.5) * 0.16, 0.8, 18), result.contactPoint);
           }
-          if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash');
+          if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash', result.contactPoint);
           copBody = makePoliceCollisionBody(cop);
         }
 
@@ -7184,7 +7226,7 @@ export default function App() {
           if (!result) continue;
           applyPoliceCollisionResponse(cop, result.positionA, result.velocityA, result.yawRateA, result.relativeNormalSpeed, now);
           applyPoliceCollisionResponse(other, result.positionB, result.velocityB, result.yawRateB, result.relativeNormalSpeed, now);
-          if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash');
+          if (result.relativeNormalSpeed > 2.3) playSoundEffect('crash', result.contactPoint);
           copBody = makePoliceCollisionBody(cop);
         }
       }
@@ -7881,7 +7923,10 @@ export default function App() {
       if (event.code === 'KeyH') {
         const current = engineRef.current;
         if (current?.activeVehicle && !current.deathSequenceActive && !current.hospitalRecoveryActive) {
-          soundManager.playVehicleHorn(current.activeVehicle.type ?? current.activeVehicle.modelType ?? 'civilian_sedan');
+          soundManager.playVehicleHorn(
+            current.activeVehicle.type ?? current.activeVehicle.modelType ?? 'civilian_sedan',
+            current.activeVehicle.mesh.position
+          );
         }
       }
       if (event.code === 'KeyF') handleAttack();
@@ -7977,6 +8022,7 @@ export default function App() {
     const clearHeldInputs = () => {
       for (const code of Object.keys(keys)) keys[code] = false;
       mouseDown = false;
+      analogInputStateRef.current = { active: false, x: 0, y: 0, magnitude: 0, angle: 0 };
     };
 
     const enterArcadeMode = (machine?: ArcadeMachineInfo) => {
@@ -7994,6 +8040,7 @@ export default function App() {
       };
 
       clearHeldInputs();
+      soundManager.setArcadeMode(true);
       soundManager.stopEngine();
       soundManager.setSiren(false);
       soundManager.stopMusic();
@@ -8018,6 +8065,7 @@ export default function App() {
       activeArcadeMachineRef.current = null;
       setActiveArcadeMachine(null);
       setIsArcadeActive(false);
+      soundManager.setArcadeMode(false);
 
       const e = engineRef.current;
       if (e) {
@@ -8060,6 +8108,59 @@ export default function App() {
     window.addEventListener('resize', onResize);
     window.addEventListener('beforeunload', saveNow);
 
+    mobileKeyChangeRef.current = (code: string, isDown: boolean) => {
+      soundManager.unlock();
+      keys[code] = isDown;
+    };
+
+    mobileAnalogMoveRef.current = (data: AnalogInputData) => {
+      analogInputStateRef.current = data;
+    };
+
+    mobileCameraDragRef.current = (dx: number, dy: number) => {
+      const e = engineRef.current;
+      if (!e || e.deathSequenceActive || e.hospitalRecoveryActive) return;
+      e.cameraAngle -= dx * 0.005;
+      if (e.cameraPitch !== undefined) {
+        e.cameraPitch = Math.max(-0.25, Math.min(1.1, e.cameraPitch + dy * 0.004));
+      }
+    };
+
+    mobileActionRef.current = (action) => {
+      soundManager.unlock();
+      const activeInputEngine = engineRef.current;
+      if (!activeInputEngine || activeInputEngine.deathSequenceActive || activeInputEngine.hospitalRecoveryActive) return;
+
+      if (action === 'interact') {
+        handleInteraction();
+      } else if (action === 'attack') {
+        handleAttack();
+      } else if (action === 'grab') {
+        handleGrab();
+      } else if (action === 'special') {
+        performInstantSpecial();
+      } else if (action === 'jump') {
+        keys['Space'] = true;
+        setTimeout(() => {
+          keys['Space'] = false;
+        }, 120);
+      } else if (action === 'sprint') {
+        keys['ShiftLeft'] = !keys['ShiftLeft'];
+      } else if (action === 'horn') {
+        if (activeInputEngine.activeVehicle) {
+          soundManager.playVehicleHorn(
+            activeInputEngine.activeVehicle.type ?? activeInputEngine.activeVehicle.modelType ?? 'civilian_sedan',
+            activeInputEngine.activeVehicle.mesh.position
+          );
+        }
+      } else if (action === 'chute_cut') {
+        if (activeInputEngine.parachuteController && activeInputEngine.parachuteController.mode === 'parachute') {
+          activeInputEngine.parachuteController.cutAway();
+          showTemporaryNotification('Parachute', 'Canopy cut — FREEFALL. Press DEPLOY whenever you want to redeploy.');
+        }
+      }
+    };
+
     // ---------------------------------------------------------------------
     // MAIN LOOP
     // ---------------------------------------------------------------------
@@ -8072,6 +8173,8 @@ export default function App() {
     const tempLookTarget = new THREE.Vector3();
     const tempGroundCameraProbe = new THREE.Vector3();
     const tempShake = new THREE.Vector3();
+    const tempAudioForward = new THREE.Vector3();
+    const tempAudioRight = new THREE.Vector3();
 
     // Keep a low upward-looking third-person orbit above the authored floor without
     // changing its look angle. Rather than clamping Y (which would flatten the view),
@@ -8228,24 +8331,25 @@ export default function App() {
         sun.shadow.map?.dispose();
         sun.shadow.map = null;
       }
-      // Dropping the far plane during an emergency performance recovery caused a
-      // very obvious world pop/"everything vanished" effect even after FPS had
-      // recovered. Resolution/shadows are the expensive knobs; keep the normal
-      // gameplay horizon resident in both balanced and performance tiers.
-      const cameraFar = next === 'high' ? 1250 : 980;
-      if (camera.far !== cameraFar) {
+      const inAir = !!(
+        engineRef.current?.activeAircraft ||
+        engineRef.current?.charizardFlightActive ||
+        (engineRef.current?.playerMovement && engineRef.current.playerMovement.position.y > 25)
+      );
+      const cameraFar = inAir
+        ? (next === 'high' ? 780 : next === 'balanced' ? 620 : 460)
+        : (next === 'high' ? 460 : next === 'balanced' ? 350 : 280);
+      if (Math.abs(camera.far - cameraFar) > 1) {
         camera.far = cameraFar;
         camera.updateProjectionMatrix();
       }
       renderer.shadowMap.needsUpdate = true;
       particles.setPerformanceMode(next === 'performance');
 
-      // Apply the tier's static shadow radius immediately, including the initial
-      // Balanced setup. Previously every authored caster started enabled and was only
-      // corrected in tiny background batches. A 5 FPS game could therefore spend
-      // minutes redrawing thousands of remote shadow casters before the sweep caught
-      // up. This one-time O(n) tier transition happens outside normal per-frame work
-      // and preserves the attractive LOCAL sunlight shadows the user wants.
+      // Apply the tier's static shadow radius and detail culling immediately, including the initial
+      // Balanced setup. Previously every authored mesh/caster started enabled and was only
+      // corrected in tiny background batches, leaving thousands of remote meshes submitting
+      // draw calls on frame 1.
       const anchor = getActivePosition();
       const immediateShadowDistance = next === 'high' ? 82 : next === 'balanced' ? 58 : 42;
       const immediateShadowDistanceSq = immediateShadowDistance * immediateShadowDistance;
@@ -8256,6 +8360,31 @@ export default function App() {
       }
       staticShadowCursor = 0;
       staticShadowWorkRemaining = 0;
+
+      const immediateDetailDistance = next === 'high' ? 118 : next === 'balanced' ? 82 : 58;
+      const immediateInteriorDistance = next === 'high' ? 62 : next === 'balanced' ? 50 : 34;
+      const immediateDetailDistanceSq = immediateDetailDistance * immediateDetailDistance;
+      const immediateInteriorDistanceSq = immediateInteriorDistance * immediateInteriorDistance;
+      for (let i = 0; i < detailCullEntries.length; i++) {
+        const entry = detailCullEntries[i];
+        const dx = entry.x - anchor.x;
+        const dz = entry.z - anchor.z;
+        const limitSq = entry.interior ? immediateInteriorDistanceSq : immediateDetailDistanceSq;
+        entry.object.visible = dx * dx + dz * dz <= limitSq;
+      }
+      detailCullCursor = 0;
+      detailCullWorkRemaining = 0;
+
+      if (engineRef.current) {
+        const propDistance = next === 'high' ? 180 : next === 'balanced' ? 145 : 108;
+        const propDistanceSq = propDistance * propDistance;
+        for (let i = 0; i < engineRef.current.destructibles.length; i++) {
+          const prop = engineRef.current.destructibles[i];
+          const dx = prop.mesh.position.x - anchor.x;
+          const dz = prop.mesh.position.z - anchor.z;
+          prop.mesh.visible = dx * dx + dz * dz <= propDistanceSq;
+        }
+      }
     };
 
     // Apply the balanced defaults immediately; do not wait for the first adaptive tier change.
@@ -8415,6 +8544,7 @@ export default function App() {
           airport: airport.group.visible,
           airportCore: airportCorePerformanceVisible,
           highway: highway.group.visible,
+          arcade: arcadeBuilding.group.visible,
         },
         npcs: {
           visible: current.npcManager.npcs.reduce((count, npc) => count + (npc.mesh.visible ? 1 : 0), 0),
@@ -8481,6 +8611,7 @@ export default function App() {
       springfield.group.visible = true;
       airport.group.visible = true;
       highway.group.visible = true;
+      arcadeBuilding.group.visible = true;
       let reason = 'manual world-root recovery';
       if (
         !current.activeVehicle &&
@@ -9192,6 +9323,7 @@ export default function App() {
         }
       }
 
+      const analog = analogInputStateRef.current;
       const pInputs: PlayerInputs = {
         forward: !movementLocked && (!!keys['KeyW'] || !!keys['ArrowUp']),
         backward: !movementLocked && (!!keys['KeyS'] || !!keys['ArrowDown']),
@@ -9199,13 +9331,18 @@ export default function App() {
         right: !movementLocked && (!!keys['KeyD'] || !!keys['ArrowRight']),
         jump: !movementLocked && !e.charizardFlightActive && !!keys['Space'],
         allowAirborneJump: e.currentPokemonId !== 'charizard',
-        sprint: !movementLocked && (!!keys['ShiftLeft'] || !!keys['ShiftRight']),
+        sprint: !movementLocked && (!!keys['ShiftLeft'] || !!keys['ShiftRight'] || (analog.active && analog.magnitude >= 0.88)),
         // F/Q are handled explicitly so one key press cannot accidentally double-trigger effects.
         kick: false,
         water: false,
         movementScale: (performance.now() * 0.001 < Number(e.playerMesh.userData.powerSlowUntil ?? 0) ? 0.48 : 1) * (e.grabbedNpcId ? 0.78 : 1),
         collisionRadius: e.currentPokemonId === 'charizard' ? 0.82 : 0.65,
         collisionHeight: e.currentPokemonId === 'charizard' ? 2.72 : 1.9,
+        analogActive: !movementLocked && analog.active,
+        analogX: analog.x,
+        analogY: analog.y,
+        analogMagnitude: analog.magnitude,
+        analogAngle: analog.angle,
       };
       const cInputs: CarInputs = {
         forward: !movementLocked && (!!keys['KeyW'] || !!keys['ArrowUp']),
@@ -9213,7 +9350,10 @@ export default function App() {
         left: !movementLocked && (!!keys['KeyA'] || !!keys['ArrowLeft']),
         right: !movementLocked && (!!keys['KeyD'] || !!keys['ArrowRight']),
         handbrake: !movementLocked && !!keys['Space'],
-        boost: !movementLocked && (!!keys['ShiftLeft'] || !!keys['ShiftRight']),
+        boost: !movementLocked && (!!keys['ShiftLeft'] || !!keys['ShiftRight'] || (analog.active && analog.magnitude >= 0.88)),
+        analogActive: !movementLocked && analog.active,
+        analogSteer: analog.x,
+        analogThrottle: -analog.y,
       };
       const aircraftInputs = {
         throttleUp: !!keys['KeyW'],
@@ -9252,7 +9392,7 @@ export default function App() {
             freeResult.impact.severity,
             freeResult.impact.lodged,
           );
-          if (freeResult.impact.severity !== 'minor') playSoundEffect('crash');
+          if (freeResult.impact.severity !== 'minor') playSoundEffect('crash', freeResult.impact.point ?? plane.mesh.position);
         }
         if (controller.isCrashCleanupReady()) {
           e.particles.clearAircraftCrashEffects(plane.mesh);
@@ -9642,7 +9782,7 @@ export default function App() {
           camera.updateProjectionMatrix();
         }
 
-        soundManager.playEngine(Math.max(2, plane.speed + plane.throttle * plane.maxSpeed * 0.22), plane.maxSpeed);
+        soundManager.playEngine(Math.max(2, plane.speed + plane.throttle * plane.maxSpeed * 0.22), plane.maxSpeed, plane.mesh.position);
         if (result.impact) {
           const severityShake = result.impact.severity === 'major' ? 0.92 : result.impact.severity === 'moderate' ? 0.58 : 0.28;
           e.cameraShake = Math.max(e.cameraShake, severityShake);
@@ -9653,7 +9793,7 @@ export default function App() {
             result.impact.severity,
             result.impact.lodged,
           );
-          if (result.impact.severity !== 'minor') playSoundEffect('crash');
+          if (result.impact.severity !== 'minor') playSoundEffect('crash', result.impact.point ?? plane.mesh.position);
         }
         if (result.hardLanding && !result.crashedThisFrame) {
           showTemporaryNotification(plane.name, `Hard landing • ${Math.round(plane.damage)}% damage`);
@@ -9803,6 +9943,7 @@ export default function App() {
         e.activeVehicle.mesh.rotation.y = e.activeCarPhysics.yaw;
         e.activeVehicle.speed = e.activeCarPhysics.speed;
         e.activeVehicle.yaw = e.activeCarPhysics.yaw;
+        soundManager.playEngine(e.activeCarPhysics.speed, e.activeCarPhysics.maxSpeed, e.activeCarPhysics.position);
         e.playerMovement.position.copy(e.activeCarPhysics.position);
         e.playerMesh.position.copy(e.activeCarPhysics.position);
         e.playerMesh.visible = false;
@@ -10592,13 +10733,25 @@ export default function App() {
         camera.position.add(tempShake);
       }
 
+      // Spatial Audio Listener Update: Feed 3D camera world position, forward, and right vectors
+      camera.getWorldDirection(tempAudioForward);
+      tempAudioRight.crossVectors(tempAudioForward, camera.up).normalize();
+      soundManager.updateListener(camera.position, tempAudioForward, tempAudioRight);
+
       const activePos = getActivePosition();
       // Landmark-local animation/LOD. The volcano keeps its large silhouette resident
       // while only lava/smoke/rocks/trees animate/render at useful distances.
       highway.update(dt, activePos);
-      // Fountain ambience fades in only when the player is near the Pokémon Center
-      // plaza. It uses a synthesized water-noise loop rather than an external file.
-      soundManager.setFountainAmbience(activePos.distanceTo(fountainWorldPosition));
+      // Fountain ambience with 3D world position
+      soundManager.setFountainAmbience(activePos.distanceTo(fountainWorldPosition), fountainWorldPosition);
+
+      // Western volcano seismic deep rumble
+      const volcanoPos = { x: -505, y: 15, z: -145 };
+      soundManager.setVolcanoAmbience(activePos.distanceTo(volcanoPos), volcanoPos);
+
+      // River shoreline water ambience
+      const nearRiver = isOpenRiverWater(activePos) || Math.abs(activePos.x - 20) < 35;
+      soundManager.setWaterShoreAmbience(nearRiver ? 6 : 70, { x: 20, y: 0, z: activePos.z });
 
       // Keep visual wheel spin and lamp response at render rate even though traffic
       // and police AI can simulate more cheaply at fixed lower frequencies.
@@ -10658,23 +10811,33 @@ export default function App() {
       const shouldShowSpringfield =
         positionNeedsSpringfield(activePos) ||
         positionNeedsSpringfield(camera.position);
-      // Do NOT visibility-toggle the complete airport parent. The public access
-      // spine and green belt physically connect the airport to both cities, which is
-      // exactly why the old whole-root Box3 test incorrectly kept the *entire* heavy
-      // airport render tree active in Goldenrod. Keep that connector parent resident
-      // and only cull the precomputed heavy static core in emergency performance mode.
       if (goldenrod.group.visible !== shouldShowGoldenrod) goldenrod.group.visible = shouldShowGoldenrod;
       if (springfield.group.visible !== shouldShowSpringfield) springfield.group.visible = shouldShowSpringfield;
+
+      const inAirHigh = Boolean(
+        e.activeAircraft ||
+        e.charizardFlightActive ||
+        (e.parachuteController && (activePos.y > 30 || camera.position.y > 30))
+      );
+
+      // Airport is far to the north (Z = -380 to -900). Only render its 1,500+ meshes when
+      // the player/camera is approaching the northern sector or flying high in the air.
+      const shouldShowAirport = inAirHigh || activePos.z < -130 || camera.position.z < -130;
+      if (airport.group.visible !== shouldShowAirport) airport.group.visible = shouldShowAirport;
+
+      // Arcade building is at X = 8, Z = -305. Only render its 450+ meshes when nearby,
+      // inside arcade mode, or high in the air.
+      const distArcadeZ = Math.min(Math.abs(activePos.z - (-305)), Math.abs(camera.position.z - (-305)));
+      const shouldShowArcade = arcadeActiveRef.current || inAirHigh || distArcadeZ < (qualityTier === 'performance' ? 180 : 250);
+      if (arcadeBuilding.group.visible !== shouldShowArcade) arcadeBuilding.group.visible = shouldShowArcade;
+
       const distanceSqToRootBoundsXZ = (bounds: THREE.Box3, position: THREE.Vector3) => {
         if (bounds.isEmpty()) return Number.POSITIVE_INFINITY;
         const dx = position.x < bounds.min.x ? bounds.min.x - position.x : position.x > bounds.max.x ? position.x - bounds.max.x : 0;
         const dz = position.z < bounds.min.z ? bounds.min.z - position.z : position.z > bounds.max.z ? position.z - bounds.max.z : 0;
         return dx * dx + dz * dz;
       };
-      // The complete airport parent remains visible so its approach road/terrain do
-      // not disappear. Three.js stops descending into a hidden child subtree, so the
-      // static-core switch removes both traversal cost and draw submissions at once.
-      if (!airport.group.visible) airport.group.visible = true;
+
       if (qualityTier === 'performance') {
         const rootMarginSq = 135 * 135;
         const airportCoreMarginSq = 115 * 115;
@@ -10755,7 +10918,7 @@ export default function App() {
         // visibility/castShadow mutations on every 150ms frame, trapping the game in
         // a self-sustaining low-FPS state while the player was completely idle.
         if (detailCullWorkRemaining > 0) {
-          const detailBudget = Math.min(detailCullWorkRemaining, qualityTier === 'performance' ? 72 : 110);
+          const detailBudget = Math.min(detailCullWorkRemaining, qualityTier === 'performance' ? 240 : 360);
           detailCullCursor = processCyclicBatch(detailCullEntries.length, detailCullCursor, detailBudget, (index) => {
             const entry = detailCullEntries[index];
             const distanceSq = distanceSqToViewAnchor(entry.x, entry.z);
@@ -10766,7 +10929,7 @@ export default function App() {
         }
 
         if (staticShadowWorkRemaining > 0) {
-          const shadowBudget = Math.min(staticShadowWorkRemaining, qualityTier === 'performance' ? 56 : 90);
+          const shadowBudget = Math.min(staticShadowWorkRemaining, qualityTier === 'performance' ? 120 : 180);
           staticShadowCursor = processCyclicBatch(staticShadowEntries.length, staticShadowCursor, shadowBudget, (index) => {
             const entry = staticShadowEntries[index];
             const dx = entry.x - activePos.x;
@@ -10780,7 +10943,7 @@ export default function App() {
         // maintenance periodic but bounded to small fixed batches.
         const propDrawDistance = qualityTier === 'high' ? 180 : qualityTier === 'balanced' ? 145 : 108;
         const propDrawDistanceSq = propDrawDistance * propDrawDistance;
-        const propBudget = Math.min(e.destructibles.length, qualityTier === 'performance' ? 24 : 40);
+        const propBudget = Math.min(e.destructibles.length, qualityTier === 'performance' ? 60 : 100);
         propCullCursor = processCyclicBatch(e.destructibles.length, propCullCursor, propBudget, (index) => {
           const prop = e.destructibles[index];
           prop.mesh.visible = distanceSqToViewAnchor(prop.mesh.position.x, prop.mesh.position.z) <= propDrawDistanceSq;
@@ -10868,7 +11031,32 @@ export default function App() {
         const hybridGreeting = e.trafficManager.consumeHybridGreeting();
         if (hybridGreeting && !e.activeVehicle && !e.deathSequenceActive && !e.hospitalRecoveryActive) {
           showTemporaryNotification(hybridGreeting.name, hybridGreeting.text);
-          soundManager.playVehicleHorn('lightning_mcqueen');
+          const mcqueen = e.trafficManager.vehicles.find(v => v.type === 'lightning_mcqueen' || v.id === 'lightning_mcqueen');
+          soundManager.playVehicleHorn('lightning_mcqueen', mcqueen?.mesh.position);
+        }
+
+        // Realistic proximity & spatial audio for traffic, aircraft, and magnet train
+        soundManager.updateTrafficAudio(
+          e.trafficManager.vehicles
+            .filter((v) => v !== e.activeVehicle)
+            .map((v) => ({
+              position: v.mesh.position,
+              speed: v.speed ?? 0,
+            }))
+        );
+        soundManager.updateAircraftAudio(
+          e.airportAircraft.map((plane) => ({
+            position: plane.mesh.position,
+            speed: plane.speed,
+            maxSpeed: plane.maxSpeed,
+            inFlight: plane.inFlight,
+          }))
+        );
+        if (goldenrod?.trainService) {
+          soundManager.updateTrainAudio(
+            goldenrod.trainService.trainMesh.position,
+            !goldenrod.trainService.isTrainStopped()
+          );
         }
 
         measureWorld('worldInteractions', () => e.worldInteractions.update(simDt));
@@ -10972,7 +11160,16 @@ export default function App() {
           setWantedLevel(pursuitLevel);
         }
         ensurePoliceCount(pursuitLevel, activePos);
-        soundManager.setSiren(e.hitAndRunActive);
+        let nearestCopPos: THREE.Vector3 | undefined = undefined;
+        let minCopDist = Infinity;
+        for (const cop of e.policeAIs) {
+          const d = activePos.distanceTo(cop.position);
+          if (d < minCopDist) {
+            minCopDist = d;
+            nearestCopPos = cop.position;
+          }
+        }
+        soundManager.setSiren(e.hitAndRunActive, nearestCopPos);
         if (e.hitAndRunActive) spawnRoadblock(pursuitLevel, activePos, e.activeCarPhysics?.yaw ?? e.playerMovement.yaw);
         let gotBusted = false;
         const pursuitSpeed = e.activeCarPhysics ? e.activeCarPhysics.speed : 0;
@@ -11105,6 +11302,8 @@ export default function App() {
           return { x: p.x, z: p.z };
         }));
         setAshBattleState({ ...e.ashBattle.state });
+        setCharizardFlightActive(Boolean(e.charizardFlightActive));
+        setGrabbedNpcId(e.grabbedNpcId ?? null);
         if (e.activeAircraft) {
           const plane = e.activeAircraft;
           const planeGround = e.collisionSystem.getGroundHeightNear(plane.position.x, plane.position.z, plane.position.y, 0.12, 12, 260);
@@ -11198,6 +11397,19 @@ export default function App() {
       }
 
       skyDome.position.copy(camera.position);
+
+      const inAir = !!(
+        e.activeAircraft ||
+        e.charizardFlightActive ||
+        (e.playerMovement && e.playerMovement.position.y > 25)
+      );
+      const targetFar = inAir
+        ? (qualityTier === 'high' ? 780 : qualityTier === 'balanced' ? 620 : 460)
+        : (qualityTier === 'high' ? 460 : qualityTier === 'balanced' ? 350 : 280);
+      if (Math.abs(camera.far - targetFar) > 1) {
+        camera.far = targetFar;
+        camera.updateProjectionMatrix();
+      }
       // Spread first-use GPU uploads over healthy frames instead of allowing a new
       // district to upload hundreds of buffers in one 300-1200 ms hitch. Never warm
       // while the game is already struggling or during an active crash/death sequence.
@@ -11922,6 +12134,50 @@ export default function App() {
           roomCode={mpState.roomCode}
           playerCount={mpState.playerCount}
           onOpenMultiplayer={() => setShowMultiplayerModal(true)}
+          controlMode={controlMode}
+          showBigMap={showBigMap}
+          onToggleBigMap={setShowBigMap}
+        />
+      )}
+
+      {controlMode === 'mobile' && !isPortrait && !isArcadeActive && !isPaused && (
+        <MobileControls
+          inVehicle={inVehicle}
+          currentVehicle={currentVehicleInfo}
+          aircraft={aircraftHud}
+          parachute={parachuteHud}
+          charizardFlightActive={charizardFlightActive}
+          currentPokemonId={selectedPokemonId}
+          grabbedNpcId={grabbedNpcId}
+          interactionPrompt={interactionPrompt}
+          onAction={(action) => mobileActionRef.current(action)}
+          onKeyChange={(code, isDown) => mobileKeyChangeRef.current(code, isDown)}
+          onAnalogMove={(data) => mobileAnalogMoveRef.current(data)}
+          onCameraDrag={(dx, dy) => mobileCameraDragRef.current(dx, dy)}
+          onTogglePause={handleTogglePause}
+          onOpenBigMap={() => setShowBigMap(true)}
+          onToggleMute={handleToggleMute}
+          onResetPlayer={handleResetPlayer}
+          isMuted={isMuted}
+          playerPos={playerPos}
+          playerYaw={playerYaw}
+          worldMap={worldMap}
+          landmarks={landmarks}
+          policePositions={policePositions}
+          pokemonHp={pokemonHp}
+          pokemonWater={pokemonWater}
+          wantedHeat={wantedHeat}
+          hitAndRunActive={hitAndRunActive}
+          treesGrownCount={treesGrownCount}
+        />
+      )}
+
+      {controlMode === 'mobile' && isPortrait && (
+        <PortraitRotateOverlay
+          onSwitchToPcMode={() => {
+            setControlMode('pc');
+            localStorage.setItem('pokemon_hit_and_run_control_mode', 'pc');
+          }}
         />
       )}
 
@@ -11934,27 +12190,112 @@ export default function App() {
       )}
 
       {isPaused && (
-        <div className="absolute inset-0 z-[220] flex items-center justify-center bg-slate-950/72 p-4 backdrop-blur-md pointer-events-auto select-none">
+        <div className="absolute inset-0 z-[220] flex items-center justify-center bg-slate-950/72 p-2 sm:p-4 backdrop-blur-md pointer-events-auto select-none">
           {!developerDebugOpen ? (
-            <div className="w-[min(520px,calc(100vw-2rem))] rounded-3xl border-2 border-amber-400/80 bg-slate-950/95 p-6 text-white shadow-[0_0_55px_rgba(245,158,11,0.22)]">
-              <div className="text-center">
-                <div className="text-xs font-black uppercase tracking-[0.32em] text-amber-300">
-                  {mpState.isInRoom ? 'Multiplayer Session Active' : 'Game Paused'}
+            <div className="w-[min(540px,calc(100vw-1.5rem))] max-h-[92vh] overflow-y-auto overscroll-contain rounded-3xl border-2 border-amber-400/80 bg-slate-950/95 p-4 sm:p-6 text-white shadow-[0_0_55px_rgba(245,158,11,0.22)]">
+              {/* Header with Title and Pressable X Close Button */}
+              <div className="flex items-start justify-between gap-3 border-b border-slate-800 pb-3 sm:pb-4">
+                <div className="text-left">
+                  <div className="text-[10px] sm:text-xs font-black uppercase tracking-[0.32em] text-amber-300">
+                    {mpState.isInRoom ? 'Multiplayer Session Active' : 'Game Paused'}
+                  </div>
+                  <div className="mt-1 text-2xl sm:text-4xl font-black tracking-tight">PAUSE</div>
+                  <div className="mt-1 text-xs sm:text-sm text-slate-400">
+                    {mpState.isInRoom
+                      ? 'Local controls paused. Other players and the shared world continue live.'
+                      : 'Gameplay, physics, AI and world simulation are frozen.'}
+                  </div>
                 </div>
-                <div className="mt-2 text-4xl font-black tracking-tight">PAUSE</div>
-                <div className="mt-2 text-sm text-slate-400">
-                  {mpState.isInRoom
-                    ? 'Your local controls are paused. Other players and the shared world continue live.'
-                    : 'Gameplay, physics, AI and world simulation are frozen.'}
-                </div>
-              </div>
-              <div className="mt-6 grid gap-3">
                 <button
                   type="button"
+                  id="btn-close-pause-menu"
                   onClick={handleResumeGame}
-                  className="rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-5 py-4 text-left transition hover:bg-emerald-500/25 cursor-pointer"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleResumeGame();
+                  }}
+                  className="min-h-[44px] min-w-[44px] shrink-0 rounded-2xl border border-amber-400/60 bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-200 transition hover:bg-amber-500/30 active:bg-amber-500/40 cursor-pointer flex items-center justify-center gap-1"
+                  title="Resume Game / Close Pause Menu"
                 >
-                  <div className="font-black text-emerald-200">Resume Game</div>
+                  <X className="w-4 h-4" />
+                  <span className="hidden xs:inline font-black">RESUME</span>
+                </button>
+              </div>
+
+              <div className="mt-4 sm:mt-6 grid gap-3">
+                {/* CONTROL MODE TOGGLE REQUIRED BY USER */}
+                <div className="rounded-2xl border border-amber-400/60 bg-slate-900/90 p-3 sm:p-4 shadow-inner">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                      🎮 Control Mode
+                    </div>
+                    <span className="text-[11px] text-amber-200/80 font-bold">
+                      {controlMode === 'mobile' ? 'iPhone / Mobile' : 'PC (Keyboard & Mouse)'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      id="btn-control-mode-pc"
+                      onClick={() => {
+                        setControlMode('pc');
+                        localStorage.setItem('pokemon_hit_and_run_control_mode', 'pc');
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        setControlMode('pc');
+                        localStorage.setItem('pokemon_hit_and_run_control_mode', 'pc');
+                      }}
+                      className={`min-h-[44px] rounded-xl py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-black transition cursor-pointer ${
+                        controlMode === 'pc'
+                          ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20 ring-2 ring-amber-300'
+                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 active:bg-slate-700'
+                      }`}
+                    >
+                      <Monitor className="w-4 h-4" />
+                      <span>PC</span>
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-control-mode-mobile"
+                      onClick={() => {
+                        setControlMode('mobile');
+                        localStorage.setItem('pokemon_hit_and_run_control_mode', 'mobile');
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        setControlMode('mobile');
+                        localStorage.setItem('pokemon_hit_and_run_control_mode', 'mobile');
+                      }}
+                      className={`min-h-[44px] rounded-xl py-2.5 px-3 flex items-center justify-center gap-2 text-xs font-black transition cursor-pointer ${
+                        controlMode === 'mobile'
+                          ? 'bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20 ring-2 ring-amber-300'
+                          : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700/80 active:bg-slate-700'
+                      }`}
+                    >
+                      <Smartphone className="w-4 h-4" />
+                      <span>iPhone / Mobile</span>
+                    </button>
+                  </div>
+                  <div className="mt-2 text-[10px] text-slate-400 leading-tight">
+                    {controlMode === 'mobile'
+                      ? 'Landscape only touch controls: virtual analog stick, camera drag, and responsive action buttons.'
+                      : 'WASD / Arrow keys for movement, Space to jump, E to interact, F to attack, G to grab, Q for special move.'}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  id="btn-pause-resume"
+                  onClick={handleResumeGame}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    handleResumeGame();
+                  }}
+                  className="min-h-[44px] rounded-2xl border border-emerald-400/60 bg-emerald-500/15 px-4 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-emerald-500/25 active:bg-emerald-500/35 cursor-pointer"
+                >
+                  <div className="font-black text-emerald-200">▶ Resume Game</div>
                   <div className="mt-1 text-xs text-slate-400">Continue exactly where you paused.</div>
                 </button>
 
@@ -11962,7 +12303,11 @@ export default function App() {
                   type="button"
                   id="btn-pause-multiplayer"
                   onClick={() => setShowMultiplayerModal(true)}
-                  className="rounded-2xl border border-indigo-400/60 bg-indigo-500/15 px-5 py-4 text-left transition hover:bg-indigo-500/25 cursor-pointer"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setShowMultiplayerModal(true);
+                  }}
+                  className="min-h-[44px] rounded-2xl border border-indigo-400/60 bg-indigo-500/15 px-4 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-indigo-500/25 active:bg-indigo-500/35 cursor-pointer"
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-black text-indigo-200">👥 Multiplayer (Host / Join)</div>
@@ -11981,6 +12326,7 @@ export default function App() {
 
                 <button
                   type="button"
+                  id="btn-pause-arcade"
                   onClick={() => {
                     if (mpState.isInRoom) {
                       showTemporaryNotification('Arcade Restricted', 'Arcade minigames are disabled during active multiplayer sessions.');
@@ -11989,7 +12335,16 @@ export default function App() {
                     handleResumeGame();
                     enterArcadeModeRef.current();
                   }}
-                  className={`rounded-2xl border border-purple-400/60 bg-purple-500/15 px-5 py-4 text-left transition hover:bg-purple-500/25 cursor-pointer ${mpState.isInRoom ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  onTouchEnd={(e) => {
+                    if (mpState.isInRoom) {
+                      showTemporaryNotification('Arcade Restricted', 'Arcade minigames are disabled during active multiplayer sessions.');
+                      return;
+                    }
+                    e.preventDefault();
+                    handleResumeGame();
+                    enterArcadeModeRef.current();
+                  }}
+                  className={`min-h-[44px] rounded-2xl border border-purple-400/60 bg-purple-500/15 px-4 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-purple-500/25 active:bg-purple-500/35 cursor-pointer ${mpState.isInRoom ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
                   <div className="font-black text-purple-200">🎮 Play Arcade Machine (Coin-Op)</div>
                   <div className="mt-1 text-xs text-slate-400">
@@ -11999,27 +12354,36 @@ export default function App() {
 
                 <button
                   type="button"
+                  id="btn-pause-developer-debug"
                   onClick={handleToggleDeveloperDebug}
-                  className="rounded-2xl border border-cyan-400/60 bg-cyan-500/10 px-5 py-4 text-left transition hover:bg-cyan-500/20 cursor-pointer"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    handleToggleDeveloperDebug();
+                  }}
+                  className="min-h-[44px] rounded-2xl border border-cyan-400/60 bg-cyan-500/10 px-4 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-cyan-500/20 active:bg-cyan-500/30 cursor-pointer"
                 >
-                  <div className="font-black text-cyan-200">Developer / Performance Debug</div>
+                  <div className="font-black text-cyan-200">🔧 Developer / Performance Debug</div>
                   <div className="mt-1 text-xs text-slate-400">Inspect camera, world visibility, renderer, physics, memory and recent stalls.</div>
                 </button>
               </div>
-              <div className="mt-5 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ESC or Pause button to resume</div>
+              <div className="mt-4 text-center text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">ESC, Tap X, or Pause button to resume</div>
             </div>
           ) : (
-            <div className="flex max-h-[92vh] w-[min(1050px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border-2 border-cyan-400/70 bg-slate-950/95 text-white shadow-[0_0_60px_rgba(34,211,238,0.20)]">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/80 px-5 py-4">
+            <div className="flex max-h-[92vh] w-[min(1050px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-3xl border-2 border-cyan-400/70 bg-slate-950/95 text-white shadow-[0_0_60px_rgba(34,211,238,0.20)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/80 px-4 sm:px-5 py-3 sm:py-4">
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.28em] text-cyan-300">Developer / Performance Debug</div>
-                  <div className="mt-1 text-sm text-slate-400">Pause immediately when a glitch occurs, then copy this snapshot before recovering.</div>
+                  <div className="mt-1 text-xs sm:text-sm text-slate-400">Pause immediately when a glitch occurs, then copy this snapshot before recovering.</div>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={handleCopyDebugSnapshot}
-                    className={`rounded-xl border px-3 py-2 text-xs font-black transition ${
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      handleCopyDebugSnapshot();
+                    }}
+                    className={`min-h-[40px] rounded-xl border px-3 py-2 text-xs font-black transition cursor-pointer ${
                       copySnapshotStatus === 'copied'
                         ? 'border-emerald-400/70 bg-emerald-500/20 text-emerald-100'
                         : copySnapshotStatus === 'failed'
@@ -12029,8 +12393,29 @@ export default function App() {
                   >
                     {copySnapshotStatus === 'copied' ? 'Copied ✓' : copySnapshotStatus === 'failed' ? 'Copy Failed' : 'Copy Snapshot'}
                   </button>
-                  <button type="button" onClick={handleRecoverCameraAndWorld} className="rounded-xl border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-100 hover:bg-amber-500/20">Recover Camera / World</button>
-                  <button type="button" onClick={handleToggleDeveloperDebug} className="rounded-xl border border-slate-500/60 bg-slate-800 px-3 py-2 text-xs font-black text-slate-200 hover:bg-slate-700">Back</button>
+                  <button
+                    type="button"
+                    onClick={handleRecoverCameraAndWorld}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      handleRecoverCameraAndWorld();
+                    }}
+                    className="min-h-[40px] rounded-xl border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-xs font-black text-amber-100 hover:bg-amber-500/20 cursor-pointer"
+                  >
+                    Recover Camera / World
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleDeveloperDebug}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      handleToggleDeveloperDebug();
+                    }}
+                    className="min-h-[40px] rounded-xl border border-slate-500/60 bg-slate-800 px-3 py-2 text-xs font-black text-slate-200 hover:bg-slate-700 cursor-pointer flex items-center gap-1"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    <span>Back</span>
+                  </button>
                 </div>
               </div>
 

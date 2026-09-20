@@ -10,6 +10,10 @@ export interface CarInputs {
   right: boolean;
   handbrake: boolean;
   boost: boolean;
+  /** Analogue input for mobile touch controls */
+  analogActive?: boolean;
+  analogSteer?: number; // -1 to 1 (left to right)
+  analogThrottle?: number; // -1 to 1 (reverse to forward)
 }
 
 export interface PlayerInputs {
@@ -30,6 +34,12 @@ export interface PlayerInputs {
   /** Optional per-character collision body. Defaults preserve the existing roster. */
   collisionRadius?: number;
   collisionHeight?: number;
+  /** Analogue input for smooth mobile joystick movement */
+  analogActive?: boolean;
+  analogX?: number; // -1 to 1 (screen left/right)
+  analogY?: number; // -1 to 1 (screen up/down)
+  analogMagnitude?: number; // 0.0 to 1.0 (smooth distance curve)
+  analogAngle?: number; // joystick angle in radians
 }
 
 export class CarPhysics {
@@ -149,7 +159,23 @@ export class CarPhysics {
     const currentMaxSpeed = this.isBoosting ? this.maxSpeed * this.boostMultiplier : this.maxSpeed;
 
     // Acceleration / Braking
-    if (inputs.forward) {
+    if (inputs.analogActive && inputs.analogThrottle !== undefined && Math.abs(inputs.analogThrottle) > 0.05) {
+      if (inputs.analogThrottle > 0) {
+        const throttle = inputs.analogThrottle;
+        this.speed += currentAccel * throttle * clampedDt;
+        const targetSpeed = currentMaxSpeed * THREE.MathUtils.clamp(throttle, 0.35, 1.0);
+        if (this.speed > targetSpeed) this.speed = targetSpeed;
+      } else {
+        const brake = -inputs.analogThrottle;
+        if (this.speed > 1.0) {
+          this.speed -= this.braking * brake * clampedDt;
+        } else {
+          this.speed -= currentAccel * 0.7 * brake * clampedDt;
+          const targetRev = this.reverseSpeed * THREE.MathUtils.clamp(brake, 0.4, 1.0);
+          if (this.speed < -targetRev) this.speed = -targetRev;
+        }
+      }
+    } else if (inputs.forward) {
       this.speed += currentAccel * clampedDt;
       if (this.speed > currentMaxSpeed) this.speed = currentMaxSpeed;
     } else if (inputs.backward) {
@@ -169,7 +195,7 @@ export class CarPhysics {
 
     // Burnout: hold throttle + handbrake at low speed. The car spins the tyres,
     // makes smoke, and then launches when the handbrake is released.
-    this.isBurnout = inputs.forward && inputs.handbrake && Math.abs(this.speed) < 7;
+    this.isBurnout = (inputs.forward || (inputs.analogActive && (inputs.analogThrottle ?? 0) > 0.3)) && inputs.handbrake && Math.abs(this.speed) < 7;
     if (this.isBurnout) {
       this.speed = Math.min(this.speed, 4.5);
     }
@@ -185,7 +211,10 @@ export class CarPhysics {
     }
 
     // Steering
-    const steerDir = (inputs.left ? 1 : 0) - (inputs.right ? 1 : 0);
+    let steerDir = (inputs.left ? 1 : 0) - (inputs.right ? 1 : 0);
+    if (inputs.analogActive && inputs.analogSteer !== undefined && Math.abs(inputs.analogSteer) > 0.05) {
+      steerDir = -inputs.analogSteer;
+    }
     const speedRatio = Math.min(Math.abs(this.speed) / 10, 1.0);
     const highSpeedRatio = THREE.MathUtils.clamp(Math.abs(this.speed) / Math.max(1, currentMaxSpeed), 0, 1);
     const speedSteerScale = THREE.MathUtils.lerp(1, this.highSpeedSteerScale, highSpeedRatio);
@@ -232,7 +261,7 @@ export class CarPhysics {
       if (hitBank) {
         this.lastCollisionImpact = Math.abs(this.speed);
         this.speed *= -0.22;
-        playSoundEffect('crash');
+        playSoundEffect('crash', this.position);
       }
       this.position.copy(nextPos);
       this.position.y = this.waterSurfaceY + Math.sin(performance.now() * 0.0026) * 0.035;
@@ -288,7 +317,7 @@ export class CarPhysics {
       if (this.collisionCooldown <= 0 && impactSeverity > 4) {
         this.lastCollisionImpact = impactSeverity;
         this.collisionCooldown = scrapeProgress > 0.32 ? 0.18 : 0.28;
-        playSoundEffect('crash');
+        playSoundEffect('crash', resolved.position);
         particles?.emitCrashBurst(
           resolved.position.clone().add(new THREE.Vector3(0, 0.65, 0)),
           Math.min(2.0, impactSeverity / 22)
@@ -474,7 +503,7 @@ export class PlayerMovement {
     } else if (inputs.kick) {
       this.isKicking = true;
       this.kickTimer = 0.4;
-      playSoundEffect('kick');
+      playSoundEffect('kick', this.position);
     }
 
     // Water spray
@@ -483,100 +512,138 @@ export class PlayerMovement {
       const sprayOrigin = this.position.clone().add(new THREE.Vector3(0, 0.8, 0));
       const sprayDir = new THREE.Vector3(Math.sin(this.yaw), 0.1, Math.cos(this.yaw)).normalize();
       particles.emitWaterSpray(sprayOrigin, sprayDir, 3);
-      if (Math.random() < 0.2) playSoundEffect('water');
+      if (Math.random() < 0.2) playSoundEffect('water', sprayOrigin);
     }
 
     let updatedCameraAngle = cameraAngle;
     const effectiveTurnRate = inputs.sprint ? this.turnSpeed * 1.25 : this.turnSpeed;
 
-    // 1. Sideways steering (Left / Right turning & camera follow):
-    // When pressing left (A / Left arrow): turn character left and camera follows.
-    // When pressing right (D / Right arrow): turn character right and camera follows.
-    if (inputs.left && !inputs.right) {
-      this.yaw += effectiveTurnRate * clampedDt;
-      updatedCameraAngle += effectiveTurnRate * clampedDt;
-    } else if (inputs.right && !inputs.left) {
-      this.yaw -= effectiveTurnRate * clampedDt;
-      updatedCameraAngle -= effectiveTurnRate * clampedDt;
-    }
-
-    // Wrap yaw and updatedCameraAngle in [-PI, PI] to keep angles normalized
-    while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
-    while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
-    while (updatedCameraAngle > Math.PI) updatedCameraAngle -= Math.PI * 2;
-    while (updatedCameraAngle < -Math.PI) updatedCameraAngle += Math.PI * 2;
-
-    // 2. Align forward orientation if moving forward and not actively steering
-    if (inputs.forward && !inputs.left && !inputs.right) {
-      let angleDiff = updatedCameraAngle - this.yaw;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      this.yaw += angleDiff * Math.min(clampedDt * 10, 1.0);
-    }
-
-    // 3. Movement Direction & Speed Calculation
-    // Unit vectors relative to character facing direction in world space:
-    // Forward: (sin(yaw), cos(yaw))
-    // Screen Left: (cos(yaw), -sin(yaw))
-    // Screen Right: (-cos(yaw), sin(yaw))
-    const fX = Math.sin(this.yaw);
-    const fZ = Math.cos(this.yaw);
-    const lX = Math.cos(this.yaw);
-    const lZ = -Math.sin(this.yaw);
-    const rX = -Math.cos(this.yaw);
-    const rZ = Math.sin(this.yaw);
-
-    const movementScale = THREE.MathUtils.clamp(inputs.movementScale ?? 1, 0.28, 1);
-    const forwardSpeed = (inputs.sprint ? this.runSpeed : this.walkSpeed) * movementScale;
-    const backwardSpeed = (inputs.sprint ? this.backwardSpeed * 1.7 : this.backwardSpeed) * movementScale;
-    const sideSpeed = (inputs.sprint ? this.sideSpeed * 1.3 : this.sideSpeed) * movementScale;
-
     this.isWalkingBackward = false;
-
     let targetVx = 0;
     let targetVz = 0;
     let hasMovement = false;
 
-    if (inputs.forward && !inputs.backward) {
-      // FORWARD MOVEMENT (W / ArrowUp)
-      targetVx += fX * forwardSpeed;
-      targetVz += fZ * forwardSpeed;
-      hasMovement = true;
+    if (inputs.analogActive && inputs.analogMagnitude !== undefined && inputs.analogMagnitude > 0.01) {
+      // =========================================================================
+      // ANALOGUE MOBILE JOYSTICK MOVEMENT (Smooth 360° Angle + Continuous Speed)
+      // =========================================================================
+      // Screen joystick: analogX (-1 left to +1 right), analogY (-1 up/forward to +1 down/backward)
+      // Negate analogX to match camera-relative horizontal orientation in Three.js world space
+      const stickAngle = Math.atan2(-(inputs.analogX ?? 0), -(inputs.analogY ?? 0));
+      const desiredWorldYaw = updatedCameraAngle + stickAngle;
 
-      // Blend sideways if holding A or D
-      if (inputs.left && !inputs.right) {
-        targetVx += lX * sideSpeed * 0.7;
-        targetVz += lZ * sideSpeed * 0.7;
-      } else if (inputs.right && !inputs.left) {
-        targetVx += rX * sideSpeed * 0.7;
-        targetVz += rZ * sideSpeed * 0.7;
-      }
-    } else if (inputs.backward && !inputs.forward) {
-      // BACKWARDS MOVEMENT (S / ArrowDown)
-      // "For backwards movement i want the character to not face backwards must walk backwards and camera must not change directions."
-      this.isWalkingBackward = true;
-      targetVx -= fX * backwardSpeed;
-      targetVz -= fZ * backwardSpeed;
-      hasMovement = true;
+      // Smoothly rotate character to face the direction of movement
+      let yawDiff = desiredWorldYaw - this.yaw;
+      while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+      while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+      const turnResponsiveness = 14.0;
+      this.yaw += yawDiff * Math.min(clampedDt * turnResponsiveness, 1.0);
+      while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+      while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
 
-      // Blend sideways if holding A or D
-      if (inputs.left && !inputs.right) {
-        targetVx += lX * sideSpeed * 0.7;
-        targetVz += lZ * sideSpeed * 0.7;
-      } else if (inputs.right && !inputs.left) {
-        targetVx += rX * sideSpeed * 0.7;
-        targetVz += rZ * sideSpeed * 0.7;
+      // Continuous speed curve:
+      // - Near centre (mag 0.05-0.3): slow, precise micro-walk (1.6 - 3.5 m/s)
+      // - Halfway (mag ~0.5): steady walk (~7.5 m/s)
+      // - Further out (mag 0.75): fast walk (~14 m/s)
+      // - Outer edge (mag 1.0): full sprint speed (22.0 m/s)
+      const mag = THREE.MathUtils.clamp(inputs.analogMagnitude, 0, 1);
+      const movementScale = THREE.MathUtils.clamp(inputs.movementScale ?? 1, 0.28, 1);
+      let targetSpeed: number;
+      if (mag <= 0.45) {
+        const t = mag / 0.45;
+        targetSpeed = THREE.MathUtils.lerp(1.6, this.walkSpeed, t * t);
+      } else {
+        const t = (mag - 0.45) / 0.55;
+        targetSpeed = THREE.MathUtils.lerp(this.walkSpeed, this.runSpeed, t * (2 - t));
       }
-    } else if (inputs.left && !inputs.right) {
-      // ONLY LEFT (A / ArrowLeft): slowly moves left
-      targetVx += lX * sideSpeed;
-      targetVz += lZ * sideSpeed;
+      targetSpeed *= movementScale;
+
+      targetVx = Math.sin(desiredWorldYaw) * targetSpeed;
+      targetVz = Math.cos(desiredWorldYaw) * targetSpeed;
       hasMovement = true;
-    } else if (inputs.right && !inputs.left) {
-      // ONLY RIGHT (D / ArrowRight): slowly moves right
-      targetVx += rX * sideSpeed;
-      targetVz += rZ * sideSpeed;
-      hasMovement = true;
+    } else if (inputs.analogActive) {
+      // Analogue joystick is active, but thumb is within center deadzone -> smooth stop
+      hasMovement = false;
+    } else {
+      // =========================================================================
+      // STANDARD PC / KEYBOARD CONTROLS (WASD / Arrow Keys) - 100% PRESERVED
+      // =========================================================================
+      // 1. Sideways steering (Left / Right turning & camera follow):
+      if (inputs.left && !inputs.right) {
+        this.yaw += effectiveTurnRate * clampedDt;
+        updatedCameraAngle += effectiveTurnRate * clampedDt;
+      } else if (inputs.right && !inputs.left) {
+        this.yaw -= effectiveTurnRate * clampedDt;
+        updatedCameraAngle -= effectiveTurnRate * clampedDt;
+      }
+
+      // Wrap yaw and updatedCameraAngle in [-PI, PI] to keep angles normalized
+      while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+      while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
+      while (updatedCameraAngle > Math.PI) updatedCameraAngle -= Math.PI * 2;
+      while (updatedCameraAngle < -Math.PI) updatedCameraAngle += Math.PI * 2;
+
+      // 2. Align forward orientation if moving forward and not actively steering
+      if (inputs.forward && !inputs.left && !inputs.right) {
+        let angleDiff = updatedCameraAngle - this.yaw;
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        this.yaw += angleDiff * Math.min(clampedDt * 10, 1.0);
+      }
+
+      // 3. Movement Direction & Speed Calculation
+      const fX = Math.sin(this.yaw);
+      const fZ = Math.cos(this.yaw);
+      const lX = Math.cos(this.yaw);
+      const lZ = -Math.sin(this.yaw);
+      const rX = -Math.cos(this.yaw);
+      const rZ = Math.sin(this.yaw);
+
+      const movementScale = THREE.MathUtils.clamp(inputs.movementScale ?? 1, 0.28, 1);
+      const forwardSpeed = (inputs.sprint ? this.runSpeed : this.walkSpeed) * movementScale;
+      const backwardSpeed = (inputs.sprint ? this.backwardSpeed * 1.7 : this.backwardSpeed) * movementScale;
+      const sideSpeed = (inputs.sprint ? this.sideSpeed * 1.3 : this.sideSpeed) * movementScale;
+
+      if (inputs.forward && !inputs.backward) {
+        // FORWARD MOVEMENT (W / ArrowUp)
+        targetVx += fX * forwardSpeed;
+        targetVz += fZ * forwardSpeed;
+        hasMovement = true;
+
+        // Blend sideways if holding A or D
+        if (inputs.left && !inputs.right) {
+          targetVx += lX * sideSpeed * 0.7;
+          targetVz += lZ * sideSpeed * 0.7;
+        } else if (inputs.right && !inputs.left) {
+          targetVx += rX * sideSpeed * 0.7;
+          targetVz += rZ * sideSpeed * 0.7;
+        }
+      } else if (inputs.backward && !inputs.forward) {
+        // BACKWARDS MOVEMENT (S / ArrowDown)
+        this.isWalkingBackward = true;
+        targetVx -= fX * backwardSpeed;
+        targetVz -= fZ * backwardSpeed;
+        hasMovement = true;
+
+        // Blend sideways if holding A or D
+        if (inputs.left && !inputs.right) {
+          targetVx += lX * sideSpeed * 0.7;
+          targetVz += lZ * sideSpeed * 0.7;
+        } else if (inputs.right && !inputs.left) {
+          targetVx += rX * sideSpeed * 0.7;
+          targetVz += rZ * sideSpeed * 0.7;
+        }
+      } else if (inputs.left && !inputs.right) {
+        // ONLY LEFT (A / ArrowLeft): slowly moves left
+        targetVx += lX * sideSpeed;
+        targetVz += lZ * sideSpeed;
+        hasMovement = true;
+      } else if (inputs.right && !inputs.left) {
+        // ONLY RIGHT (D / ArrowRight): slowly moves right
+        targetVx += rX * sideSpeed;
+        targetVz += rZ * sideSpeed;
+        hasMovement = true;
+      }
     }
 
     if (this.isStomping) {
@@ -611,14 +678,14 @@ export class PlayerMovement {
         this.isGrounded = false;
         this.isStomping = false;
         this.jumpsUsed = 1;
-        playSoundEffect('jump');
+        playSoundEffect('jump', this.position);
       } else if (inputs.allowAirborneJump !== false && !this.isStomping && this.jumpsUsed === 1) {
         // Reset most downward/upward carry so the second jump feels immediate and
         // consistent whether pressed near the apex or during the fall.
         this.velocity.y = Math.max(this.doubleJumpForce, this.velocity.y * 0.22 + this.doubleJumpForce * 0.78);
         this.jumpsUsed = 2;
         didDoubleJump = true;
-        playSoundEffect('doubleJump');
+        playSoundEffect('doubleJump', this.position);
       } else if (inputs.allowAirborneJump !== false && !this.isStomping && this.jumpsUsed >= 2) {
         // A third fresh Space press is a ground-pound, never a third upward jump.
         this.isStomping = true;
@@ -1070,7 +1137,7 @@ export class PoliceAI {
     this.isRedLight = Math.floor(this.sirenLightTimer) % 2 === 0;
     this.sirenRedLight.visible = this.isRedLight;
     this.sirenBlueLight.visible = !this.isRedLight;
-    if (Math.random() < dt * 0.055) playSoundEffect('siren');
+    if (Math.random() < dt * 0.055) playSoundEffect('siren', this.mesh.position);
 
     this.ramCooldown = Math.max(0, this.ramCooldown - dt);
     this.recoveryTimer = Math.max(0, this.recoveryTimer - dt);

@@ -34,10 +34,33 @@ class ArcadeSoundSynth {
     }
   }
 
+  private safeSetTargetAtTime(
+    param: AudioParam,
+    target: number,
+    startTime: number,
+    timeConstant: number,
+    fallback: number = 0
+  ) {
+    try {
+      const safeTarget = Number.isFinite(target) ? target : fallback;
+      const safeStart = Number.isFinite(startTime) && startTime >= 0 ? startTime : (this.ctx?.currentTime ?? 0);
+      const safeTc = Number.isFinite(timeConstant) && timeConstant > 0 ? timeConstant : 0.05;
+      param.setTargetAtTime(safeTarget, safeStart, safeTc);
+    } catch {
+      try {
+        if (Number.isFinite(target)) {
+          param.value = target;
+        }
+      } catch {}
+    }
+  }
+
   setMuted(muted: boolean) {
     this.isMuted = muted;
     if (this.masterGain) {
-      this.masterGain.gain.value = muted ? 0 : 0.28;
+      try {
+        this.masterGain.gain.value = muted ? 0 : 0.28;
+      } catch {}
     }
   }
 
@@ -49,8 +72,9 @@ class ArcadeSoundSynth {
       this.engineOsc = this.ctx.createOscillator();
       this.engineGain = this.ctx.createGain();
       this.engineOsc.type = 'sawtooth';
-      this.engineOsc.frequency.setValueAtTime(55, this.ctx.currentTime);
-      this.engineGain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+      const now = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+      this.engineOsc.frequency.setValueAtTime(55, now);
+      this.engineGain.gain.setValueAtTime(0.04, now);
       this.engineOsc.connect(this.engineGain);
       this.engineGain.connect(this.masterGain);
       this.engineOsc.start();
@@ -61,8 +85,10 @@ class ArcadeSoundSynth {
 
   updateEngine(speedRatio: number) {
     if (!this.ctx || !this.engineOsc) return;
-    const targetFreq = 48 + speedRatio * 180;
-    this.engineOsc.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.05);
+    const safeRatio = Number.isFinite(speedRatio) ? Math.max(0, Math.min(2.5, speedRatio)) : 0;
+    const targetFreq = 48 + safeRatio * 180;
+    const now = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+    this.safeSetTargetAtTime(this.engineOsc.frequency, targetFreq, now, 0.05, 48);
   }
 
   stopEngine() {
@@ -78,80 +104,90 @@ class ArcadeSoundSynth {
   playCoin() {
     this.ensureContext();
     if (!this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.setValueAtTime(987.77, t); // B5
-    osc.frequency.setValueAtTime(1318.51, t + 0.08); // E6
-    gain.gain.setValueAtTime(0.18, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(t);
-    osc.stop(t + 0.35);
+    try {
+      const t = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(987.77, t); // B5
+      osc.frequency.setValueAtTime(1318.51, t + 0.08); // E6
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.35);
+    } catch {}
   }
 
   playBoost() {
     this.ensureContext();
     if (!this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(220, t);
-    osc.frequency.exponentialRampToValueAtTime(880, t + 0.3);
-    gain.gain.setValueAtTime(0.2, t);
-    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
-    osc.connect(gain);
-    gain.connect(this.masterGain);
-    osc.start(t);
-    osc.stop(t + 0.4);
+    try {
+      const t = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(880, t + 0.3);
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + 0.4);
+    } catch {}
   }
 
   playCrash() {
     this.ensureContext();
     if (!this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    // Noise crunch
-    const bufferSize = this.ctx.sampleRate * 0.3;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, t);
-    filter.frequency.exponentialRampToValueAtTime(80, t + 0.25);
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.35, t);
-    gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
-    noise.start(t);
+    try {
+      const t = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+      // Noise crunch
+      const bufferSize = Math.max(1, Math.floor(this.ctx.sampleRate * 0.3));
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(800, t);
+      filter.frequency.exponentialRampToValueAtTime(80, t + 0.25);
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.35, t);
+      gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+      noise.start(t);
+    } catch {}
   }
 
   playGameOver() {
     this.ensureContext();
     if (!this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    const notes = [440, 415, 392, 349, 330];
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(freq, t + idx * 0.15);
-      gain.gain.setValueAtTime(0.15, t + idx * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.15 + 0.2);
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
-      osc.start(t + idx * 0.15);
-      osc.stop(t + idx * 0.15 + 0.2);
-    });
+    try {
+      const t = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+      const notes = [440, 415, 392, 349, 330];
+      notes.forEach((freq, idx) => {
+        try {
+          const osc = this.ctx!.createOscillator();
+          const gain = this.ctx!.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(freq, t + idx * 0.15);
+          gain.gain.setValueAtTime(0.15, t + idx * 0.15);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.15 + 0.2);
+          osc.connect(gain);
+          gain.connect(this.masterGain!);
+          osc.start(t + idx * 0.15);
+          osc.stop(t + idx * 0.15 + 0.2);
+        } catch {}
+      });
+    } catch {}
   }
 
   startChiptuneBGM() {
@@ -161,18 +197,20 @@ class ArcadeSoundSynth {
     let noteIdx = 0;
     this.musicInterval = window.setInterval(() => {
       if (!this.ctx || !this.masterGain || this.isMuted) return;
-      const t = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(melody[noteIdx], t);
-      gain.gain.setValueAtTime(0.06, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-      osc.connect(gain);
-      gain.connect(this.masterGain);
-      osc.start(t);
-      osc.stop(t + 0.18);
-      noteIdx = (noteIdx + 1) % melody.length;
+      try {
+        const t = Number.isFinite(this.ctx.currentTime) ? this.ctx.currentTime : 0;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(melody[noteIdx], t);
+        gain.gain.setValueAtTime(0.06, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.18);
+        noteIdx = (noteIdx + 1) % melody.length;
+      } catch {}
     }, 220);
   }
 
@@ -508,7 +546,9 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
           }
 
           // Audio engine update
-          synthRef.current?.updateEngine(playerSpeedRef.current / maxNormalSpeed);
+          const rawSpeedRatio = maxNormalSpeed > 0 ? playerSpeedRef.current / maxNormalSpeed : 0;
+          const safeSpeedRatio = Number.isFinite(rawSpeedRatio) ? rawSpeedRatio : 0;
+          synthRef.current?.updateEngine(safeSpeedRatio);
 
           // Timer update
           timeAccumulator += dt;
@@ -897,10 +937,14 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setScanlines(!scanlines)}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 transition"
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                setScanlines(!scanlines);
+              }}
+              className="min-h-[36px] flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer"
               title="Toggle CRT Scanline Effect"
             >
               <Tv className="w-3.5 h-3.5" />
@@ -908,7 +952,11 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
             </button>
             <button
               onClick={() => setMuted(!muted)}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 transition"
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                setMuted(!muted);
+              }}
+              className="min-h-[36px] flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer"
               title="Toggle 8-Bit Audio"
             >
               {muted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
@@ -920,10 +968,17 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
                 synthRef.current?.stopChiptuneBGM();
                 onExit();
               }}
-              className="flex items-center gap-1 px-4 py-1.5 rounded-lg border-2 border-red-500 bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-[0_0_15px_rgba(239,68,68,0.7)] transition cursor-pointer"
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                synthRef.current?.stopEngine();
+                synthRef.current?.stopChiptuneBGM();
+                onExit();
+              }}
+              className="min-h-[44px] min-w-[44px] flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-lg border-2 border-red-500 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs shadow-[0_0_15px_rgba(239,68,68,0.7)] transition cursor-pointer"
             >
               <X className="w-4 h-4" />
-              EXIT ARCADE [ESC]
+              <span className="hidden xs:inline">EXIT</span>
             </button>
           </div>
         </div>

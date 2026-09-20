@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
@@ -609,6 +610,36 @@ async function startServer() {
         return;
       }
     });
+  });
+
+  // Serve static imported game assets (e.g. Redline Rush) directly before SPA fallback.
+  // This guarantees that files like game.js and sedan-model-XX.js are served with proper
+  // JavaScript MIME types rather than falling through to index.html SPA rewriting.
+  const publicImportedGames = path.resolve(process.cwd(), 'public', 'importedGames');
+  const distImportedGames = path.resolve(process.cwd(), 'dist', 'importedGames');
+  const importedGamesPath = fs.existsSync(publicImportedGames) ? publicImportedGames : distImportedGames;
+
+  const serveStaticImportedGames = express.static(importedGamesPath, {
+    index: ['index.html'],
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css; charset=utf-8');
+      } else if (filePath.endsWith('.html')) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      } else if (filePath.endsWith('.json')) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      }
+    },
+  });
+
+  app.use('/importedGames', serveStaticImportedGames);
+  app.use('/public/importedGames', serveStaticImportedGames);
+
+  // Missing imported game assets must return a 404, never the Pokémon SPA index.html
+  app.use(['/importedGames', '/public/importedGames'], (_req, res) => {
+    res.status(404).type('text/plain').send('Not Found');
   });
 
   // Vite middleware for development vs static files for production

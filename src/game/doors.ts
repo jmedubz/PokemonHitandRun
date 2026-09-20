@@ -306,7 +306,7 @@ export class Door {
     if (this.automaticLocked || this.isOpen) return;
     this.isOpen = true;
     this.targetProgress = 1;
-    playSoundEffect('door');
+    playSoundEffect('door', this.worldPos);
   }
 
   /** Convert a normal sliding door into a sensor-driven automatic door. */
@@ -399,7 +399,7 @@ export class Door {
     if (!this.isOpen) return;
     this.isOpen = false;
     this.targetProgress = 0;
-    playSoundEffect('door');
+    playSoundEffect('door', this.worldPos);
   }
 
   public toggle(): boolean {
@@ -2358,7 +2358,7 @@ export class CollisionSystem {
     if (collided && typeof carRadiusOrSpeed === 'object' && 'value' in carRadiusOrSpeed) {
       carRadiusOrSpeed.value = -carRadiusOrSpeed.value * 0.3;
     }
-    if (collided) playSoundEffect('crash');
+    if (collided) playSoundEffect('crash', vPos);
     return collided;
   }
 

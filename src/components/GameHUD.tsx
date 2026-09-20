@@ -135,6 +135,9 @@ interface GameHUDProps {
   roomCode?: string | null;
   playerCount?: number;
   onOpenMultiplayer?: () => void;
+  controlMode?: 'pc' | 'mobile';
+  showBigMap?: boolean;
+  onToggleBigMap?: (show: boolean) => void;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -181,8 +184,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   roomCode,
   playerCount,
   onOpenMultiplayer,
+  controlMode = 'pc',
+  showBigMap: controlledShowBigMap,
+  onToggleBigMap,
 }) => {
-  const [showBigMap, setShowBigMap] = useState(false);
+  const [internalShowBigMap, setInternalShowBigMap] = useState(false);
+  const showBigMap = controlledShowBigMap !== undefined ? controlledShowBigMap : internalShowBigMap;
+  const setShowBigMap = (val: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof val === 'function' ? val(showBigMap) : val;
+    if (onToggleBigMap) onToggleBigMap(nextVal);
+    setInternalShowBigMap(nextVal);
+  };
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
   const [mapFilter, setMapFilter] = useState<'all' | 'springfield' | 'goldenrod' | 'highway' | 'airport'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -198,6 +210,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
     startCenterX: number;
     startCenterZ: number;
     moved: boolean;
+  } | null>(null);
+  const touchMapRef = useRef<{
+    startX: number;
+    startY: number;
+    startCenterX: number;
+    startCenterZ: number;
+    initialPinchDist: number;
+    initialZoom: number;
+    moved: boolean;
+    isPinch: boolean;
   } | null>(null);
 
   // Keep the map heading continuous across the +/-PI yaw wrap so the marker
@@ -558,7 +580,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none select-none overflow-hidden font-sans">
       {/* ---------------- TOP LEFT: POKÉMON STATUS & WATER LEVEL ---------------- */}
-      <div ref={topLeftRef} className="absolute top-4 left-4 pointer-events-auto flex flex-col gap-2">
+      {controlMode !== 'mobile' && (
+        <div ref={topLeftRef} className="absolute top-4 left-4 pointer-events-auto flex flex-col gap-2">
         {!hasChosenStarter ? (
           <div className="bg-slate-900/90 border-2 border-red-500/80 rounded-xl px-3.5 py-3 shadow-2xl backdrop-blur-md text-white min-w-[240px] max-w-[290px]">
             <div className="flex items-center gap-2.5">
@@ -749,8 +772,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {/* ---------------- TOP RIGHT: PERFORMANCE & CONTROLS ---------------- */}
+      {controlMode !== 'mobile' && (
       <div ref={topRightRef} className="absolute top-4 right-4 pointer-events-auto flex flex-col items-end gap-2.5">
         <div className="flex items-stretch justify-end gap-2">
           <button
@@ -863,52 +888,56 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </button>
         </div>
       </div>
+      )}
 
       {/* ---------------- BOTTOM RIGHT: INSTRUCTION BAR & VEHICLE SPEEDOMETER ---------------- */}
+      {controlMode !== 'mobile' && (
       <div ref={bottomRightRef} className="absolute bottom-2 right-2 pointer-events-auto flex flex-col-reverse items-end gap-1.5 z-30 max-w-[390px] sm:max-w-[420px]">
-        {/* Instruction Bar containing the controls */}
-        <div
-          id="instruction-bar-controls"
-          className="hud-controls bg-slate-900/90 border border-slate-700/80 rounded-xl px-2 py-1.5 text-[9px] sm:text-[10px] font-bold text-slate-300 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 w-fit max-w-full"
-        >
-          <span className="text-[10px] uppercase tracking-wider text-amber-400 font-extrabold flex items-center gap-1">
-            CONTROLS
-          </span>
-          {aircraft ? (
-            <>
-              <span><b className="text-amber-400">W/S</b> Throttle / ground reverse</span>
-              <span><b className="text-amber-400">←/→</b> Turn / taxi steer</span>
-              <span><b className="text-amber-400">↑/↓</b> Climb / descend</span>
-              <span><b className="text-amber-400">Space</b> Ground brake</span>
-              <span><b className="text-amber-400">E</b> Exit / bail out</span>
-              <span><b className="text-amber-400">TAB</b> Map</span>
-            </>
-          ) : parachute ? (
-            parachute.mode === 'freefall' ? (
+        {/* Instruction Bar containing the controls - PC only */}
+        {controlMode !== 'mobile' && (
+          <div
+            id="instruction-bar-controls"
+            className="hud-controls bg-slate-900/90 border border-slate-700/80 rounded-xl px-2 py-1.5 text-[9px] sm:text-[10px] font-bold text-slate-300 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 w-fit max-w-full"
+          >
+            <span className="text-[10px] uppercase tracking-wider text-amber-400 font-extrabold flex items-center gap-1">
+              CONTROLS
+            </span>
+            {aircraft ? (
               <>
-                <span><b className="text-amber-400">SPACE</b> Deploy parachute</span>
-                <span><b className="text-amber-400">WASD / Arrows</b> Air steer</span>
+                <span><b className="text-amber-400">W/S</b> Throttle / ground reverse</span>
+                <span><b className="text-amber-400">←/→</b> Turn / taxi steer</span>
+                <span><b className="text-amber-400">↑/↓</b> Climb / descend</span>
+                <span><b className="text-amber-400">Space</b> Ground brake</span>
+                <span><b className="text-amber-400">E</b> Exit / bail out</span>
+                <span><b className="text-amber-400">TAB</b> Map</span>
               </>
+            ) : parachute ? (
+              parachute.mode === 'freefall' ? (
+                <>
+                  <span><b className="text-amber-400">SPACE</b> Deploy parachute</span>
+                  <span><b className="text-amber-400">WASD / Arrows</b> Air steer</span>
+                </>
+              ) : (
+                <>
+                  <span><b className="text-amber-400">W / ↑</b> Glide forward</span>
+                  <span><b className="text-amber-400">A/D / ←/→</b> Steer</span>
+                  <span><b className="text-amber-400">S / ↓</b> Slow / steeper descent</span>
+                </>
+              )
             ) : (
               <>
-                <span><b className="text-amber-400">W / ↑</b> Glide forward</span>
-                <span><b className="text-amber-400">A/D / ←/→</b> Steer</span>
-                <span><b className="text-amber-400">S / ↓</b> Slow / steeper descent</span>
+                <span><b className="text-amber-400">WASD</b> Move/Drive</span>
+                <span><b className="text-amber-400">E</b> Interact/Car</span>
+                <span><b className="text-amber-400">F</b> Attack</span>
+                {!inVehicle && <span><b className="text-amber-400">G</b> Grab/Throw</span>}
+                <span><b className="text-amber-400">Q</b> Special</span>
+                <span><b className="text-amber-400">Space</b> {inVehicle ? 'Brake' : 'Jump ×2 / Stomp'}</span>
+                <span><b className="text-amber-400">Shift</b> Sprint/Nitro</span>
+                <span><b className="text-amber-400">TAB</b> Map</span>
               </>
-            )
-          ) : (
-            <>
-              <span><b className="text-amber-400">WASD</b> Move/Drive</span>
-              <span><b className="text-amber-400">E</b> Interact/Car</span>
-              <span><b className="text-amber-400">F</b> Attack</span>
-              {!inVehicle && <span><b className="text-amber-400">G</b> Grab/Throw</span>}
-              <span><b className="text-amber-400">Q</b> Special</span>
-              <span><b className="text-amber-400">Space</b> {inVehicle ? 'Brake' : 'Jump ×2 / Stomp'}</span>
-              <span><b className="text-amber-400">Shift</b> Sprint/Nitro</span>
-              <span><b className="text-amber-400">TAB</b> Map</span>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Aircraft HUD only while actively piloting an aircraft. */}
         {inVehicle && aircraft && (
@@ -1043,120 +1072,111 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         )}
       </div>
+      )}
 
-      {/* ---------------- BOTTOM LEFT: HIT & RUN + INTERACTIVE MINIMAP ---------------- */}
-      <div ref={bottomLeftRef} className="absolute bottom-3 left-3 pointer-events-auto flex items-end gap-2">
-        {/* Thick clockwise meter inspired by the original game's radar-adjacent gauge,
-            rebuilt with original CSS rather than copied HUD artwork. */}
-        <div className={`flex flex-col items-center gap-1 ${hitAndRunActive ? 'animate-pulse' : ''}`} title="Cause chaos to fill the meter. Police only chase when it is completely full.">
-          <div
-            className={`relative w-[88px] h-[88px] rounded-full p-[7px] border-[4px] shadow-2xl transition-all duration-200 ${
-              hitAndRunActive ? 'border-red-500 shadow-[0_0_26px_rgba(239,68,68,0.9)]' : 'border-black/90 shadow-[0_0_14px_rgba(250,204,21,0.28)]'
-            }`}
-            style={{
-              background: `conic-gradient(from -90deg, ${hitAndRunActive ? '#ef1d1d' : wantedHeat >= 75 ? '#ff5a1f' : '#f7d21e'} 0deg, ${hitAndRunActive ? '#ffcf21' : wantedHeat >= 75 ? '#ff2d21' : '#ffd91c'} ${Math.max(0, Math.min(100, wantedHeat)) * 3.6}deg, #27272a ${Math.max(0, Math.min(100, wantedHeat)) * 3.6}deg 360deg)`,
-            }}
-          >
-            <div className="w-full h-full rounded-full bg-slate-950 border-[3px] border-black flex flex-col items-center justify-center text-center">
-              <div className={`text-[10px] leading-none font-black tracking-tight ${hitAndRunActive ? 'text-red-400' : 'text-yellow-300'}`}>HIT & RUN</div>
-              <div className="mt-1 font-black text-lg leading-none text-white">{Math.round(wantedHeat)}%</div>
+      {/* ---------------- BOTTOM LEFT: HIT & RUN + INTERACTIVE MINIMAP (PC Only, Mobile has compact top minimap) ---------------- */}
+      {controlMode !== 'mobile' && (
+        <div ref={bottomLeftRef} className="absolute bottom-3 left-3 pointer-events-auto flex items-end gap-2">
+          {/* Thick clockwise meter inspired by the original game's radar-adjacent gauge,
+              rebuilt with original CSS rather than copied HUD artwork. */}
+          <div className={`flex flex-col items-center gap-1 ${hitAndRunActive ? 'animate-pulse' : ''}`} title="Cause chaos to fill the meter. Police only chase when it is completely full.">
+            <div
+              className={`relative w-[88px] h-[88px] rounded-full p-[7px] border-[4px] shadow-2xl transition-all duration-200 ${
+                hitAndRunActive ? 'border-red-500 shadow-[0_0_26px_rgba(239,68,68,0.9)]' : 'border-black/90 shadow-[0_0_14px_rgba(250,204,21,0.28)]'
+              }`}
+              style={{
+                background: `conic-gradient(from -90deg, ${hitAndRunActive ? '#ef1d1d' : wantedHeat >= 75 ? '#ff5a1f' : '#f7d21e'} 0deg, ${hitAndRunActive ? '#ffcf21' : wantedHeat >= 75 ? '#ff2d21' : '#ffd91c'} ${Math.max(0, Math.min(100, wantedHeat)) * 3.6}deg, #27272a ${Math.max(0, Math.min(100, wantedHeat)) * 3.6}deg 360deg)`,
+              }}
+            >
+              <div className="w-full h-full rounded-full bg-slate-950 border-[3px] border-black flex flex-col items-center justify-center text-center">
+                <div className={`text-[10px] leading-none font-black tracking-tight ${hitAndRunActive ? 'text-red-400' : 'text-yellow-300'}`}>HIT & RUN</div>
+                <div className="mt-1 font-black text-lg leading-none text-white">{Math.round(wantedHeat)}%</div>
+              </div>
+            </div>
+            <div className={`px-2 py-0.5 rounded border text-[9px] font-black tracking-wider uppercase ${
+              hitAndRunActive
+                ? 'bg-red-600 border-yellow-300 text-yellow-100'
+                : wantedHeat >= 75
+                ? 'bg-red-950/90 border-red-500 text-red-300'
+                : 'bg-slate-950/90 border-yellow-500/60 text-yellow-300'
+            }`}>
+              {hitAndRunActive ? 'POLICE PURSUIT' : wantedHeat >= 75 ? 'DANGER' : 'CHAOS METER'}
             </div>
           </div>
-          <div className={`px-2 py-0.5 rounded border text-[9px] font-black tracking-wider uppercase ${
-            hitAndRunActive
-              ? 'bg-red-600 border-yellow-300 text-yellow-100'
-              : wantedHeat >= 75
-              ? 'bg-red-950/90 border-red-500 text-red-300'
-              : 'bg-slate-950/90 border-yellow-500/60 text-yellow-300'
-          }`}>
-            {hitAndRunActive ? 'POLICE PURSUIT' : wantedHeat >= 75 ? 'DANGER' : 'CHAOS METER'}
-          </div>
-        </div>
-        <div className="bg-slate-950/90 border-2 border-slate-700 rounded-2xl p-2 shadow-2xl backdrop-blur-md relative overflow-hidden group">
-          <div className="text-[11px] font-bold text-slate-300 mb-1 px-1 flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1">
-              <Compass className="w-3 h-3 text-amber-400" /> REGION RADAR
-            </span>
-            <button
-              id="btn-open-big-map"
+          <div className="bg-slate-950/90 border-2 border-slate-700 rounded-2xl p-2 shadow-2xl backdrop-blur-md relative overflow-hidden group">
+            <div className="text-[11px] font-bold text-slate-300 mb-1 px-1 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1">
+                <Compass className="w-3 h-3 text-amber-400" /> REGION RADAR
+              </span>
+              <button
+                id="btn-open-big-map"
+                onClick={() => setShowBigMap(true)}
+                className="text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded transition flex items-center gap-1 shadow-sm"
+                title="Open full interactive map (Press TAB)"
+              >
+                <Layers className="w-2.5 h-2.5" /> MAP [TAB]
+              </button>
+              <span className="text-[9px] text-slate-400 font-mono">
+                X:{Math.round(playerPos.x)} Z:{Math.round(playerPos.z)}
+              </span>
+            </div>
+
+            {/* Local moving minimap generated from the current world snapshot. Tapping opens full map only. */}
+            <div
+              id="interactive-minimap-container"
               onClick={() => setShowBigMap(true)}
-              className="text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded transition flex items-center gap-1 shadow-sm"
-              title="Open full interactive map (Press TAB)"
+              className="relative bg-[#263d2f] rounded-xl overflow-hidden border border-slate-700 group/map cursor-pointer"
+              style={{ width: `${mapWidth}px`, height: `${mapHeight}px` }}
+              title="Local navigation radar. Click to expand full world map."
             >
-              <Layers className="w-2.5 h-2.5" /> MAP [TAB]
-            </button>
-            <span className="text-[9px] text-slate-400 font-mono">
-              X:{Math.round(playerPos.x)} Z:{Math.round(playerPos.z)}
-            </span>
-          </div>
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox={`${miniMinX} ${miniMinZ} ${miniWorldWidth} ${miniWorldHeight}`}
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <rect x={miniMinX} y={miniMinZ} width={miniWorldWidth} height={miniWorldHeight} fill="#294b36" />
+                {worldMap.areas.map((area) => (
+                  <rect
+                    key={`mini_area_${area.id}`}
+                    x={area.x - area.width * 0.5}
+                    y={area.z - area.depth * 0.5}
+                    width={area.width}
+                    height={area.depth}
+                    rx={area.kind === 'sports' || area.kind === 'park' ? 1.5 : 0}
+                    fill={mapAreaFill(area)}
+                    opacity={area.kind === 'water' ? 0.95 : 0.78}
+                    stroke={area.kind === 'sports' ? '#d7f7d0' : area.kind === 'rail' ? '#cbd5e1' : 'none'}
+                    strokeWidth={area.kind === 'sports' ? 0.65 : area.kind === 'rail' ? 0.45 : 0}
+                    strokeDasharray={area.kind === 'rail' ? '2 1.5' : undefined}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+                {worldMap.roads.map((road) => renderRoadFeature(road, 'mini'))}
+              </svg>
 
-          {/* Local moving minimap generated from the current world snapshot. */}
-          <div
-            id="interactive-minimap-container"
-            className="relative bg-[#263d2f] rounded-xl overflow-hidden border border-slate-700 group/map"
-            style={{ width: `${mapWidth}px`, height: `${mapHeight}px` }}
-            title="Local navigation radar. Landmark pins can be used for safe fast travel."
-          >
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox={`${miniMinX} ${miniMinZ} ${miniWorldWidth} ${miniWorldHeight}`}
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <rect x={miniMinX} y={miniMinZ} width={miniWorldWidth} height={miniWorldHeight} fill="#294b36" />
-              {worldMap.areas.map((area) => (
-                <rect
-                  key={`mini_area_${area.id}`}
-                  x={area.x - area.width * 0.5}
-                  y={area.z - area.depth * 0.5}
-                  width={area.width}
-                  height={area.depth}
-                  rx={area.kind === 'sports' || area.kind === 'park' ? 1.5 : 0}
-                  fill={mapAreaFill(area)}
-                  opacity={area.kind === 'water' ? 0.95 : 0.78}
-                  stroke={area.kind === 'sports' ? '#d7f7d0' : area.kind === 'rail' ? '#cbd5e1' : 'none'}
-                  strokeWidth={area.kind === 'sports' ? 0.65 : area.kind === 'rail' ? 0.45 : 0}
-                  strokeDasharray={area.kind === 'rail' ? '2 1.5' : undefined}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-              {worldMap.roads.map((road) => renderRoadFeature(road, 'mini'))}
-            </svg>
+              {/* Nearby POIs - visual indicators only. Tapping small minimap opens full map, never teleports. */}
+              {landmarks.filter((lm) => miniVisible(lm.x, lm.z)).map((lm) => {
+                const mPos = miniWorldToMap(lm.x, lm.z);
+                return (
+                  <div
+                    key={lm.id}
+                    className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 border border-white/90 shadow-[0_0_5px_rgba(0,0,0,0.85)] pointer-events-none z-10"
+                    style={{ left: `${mPos.x}px`, top: `${mPos.y}px`, backgroundColor: lm.color }}
+                  />
+                );
+              })}
 
-            {/* Nearby POIs only; the full atlas carries the complete label set. */}
-            {landmarks.filter((lm) => miniVisible(lm.x, lm.z)).map((lm) => {
-              const mPos = miniWorldToMap(lm.x, lm.z);
-              return (
-                <button
-                  type="button"
-                  key={lm.id}
-                  onMouseDown={(event) => {
-                    // Keep mouse fast-travel from becoming the browser's keyboard
-                    // target. Otherwise Space on key-up can activate this pin again.
-                    event.preventDefault();
-                  }}
-                  onClick={(event) => {
-                    event.currentTarget.blur();
-                    travelToLandmark(lm);
-                  }}
-                  className="absolute w-3 h-3 rounded-full transform -translate-x-1/2 -translate-y-1/2 border border-white/90 shadow-[0_0_5px_rgba(0,0,0,0.85)] hover:scale-150 transition-transform z-10"
-                  style={{ left: `${mPos.x}px`, top: `${mPos.y}px`, backgroundColor: lm.color }}
-                  title={`${lm.name} • click for safe fast travel`}
-                  aria-label={`Fast travel to ${lm.name}`}
-                />
-              );
-            })}
-
-            {policePositions.filter((pos) => miniVisible(pos.x, pos.z)).map((pos, i) => {
-              const pMap = miniWorldToMap(pos.x, pos.z);
-              return (
-                <div
-                  key={`cop_${i}`}
-                  className="absolute w-2.5 h-2.5 rounded-full bg-red-500 border border-white transform -translate-x-1/2 -translate-y-1/2 animate-pulse pointer-events-none z-10"
-                  style={{ left: `${pMap.x}px`, top: `${pMap.y}px` }}
-                />
-              );
-            })}
+              {policePositions.filter((pos) => miniVisible(pos.x, pos.z)).map((pos, i) => {
+                const pMap = miniWorldToMap(pos.x, pos.z);
+                return (
+                  <div
+                    key={`cop_${i}`}
+                    className="absolute w-2.5 h-2.5 rounded-full bg-red-500 border border-white transform -translate-x-1/2 -translate-y-1/2 animate-pulse pointer-events-none z-10"
+                    style={{ left: `${pMap.x}px`, top: `${pMap.y}px` }}
+                  />
+                );
+              })}
 
             {/* Player stays centred while the world scrolls beneath them. */}
             <div
@@ -1179,6 +1199,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           </div>
         </div>
       </div>
+      )}
 
       {/* ---------------- ASH BATTLE VICTORY NOTIFICATION ---------------- */}
       {showAshVictory && (
@@ -1332,7 +1353,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
 
       {/* ---------------- INTERACTION PROMPT LANE ---------------- */}
-      {interactionPrompt && (
+      {controlMode !== 'mobile' && interactionPrompt && (
         <div
           className="absolute z-[45] pointer-events-none transition-[left,right,bottom] duration-150 flex justify-center"
           style={interactionPromptStyle}
@@ -1346,10 +1367,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* ---------------- OAK LAB WALK-UP POKÉMON CONFIRMATION ---------------- */}
       {starterSelectionCandidate && (
-        <div className="absolute inset-0 z-[110] pointer-events-none flex items-end justify-center px-4 pb-[clamp(108px,16vh,168px)]">
-          <div className="pointer-events-auto w-[min(420px,calc(100vw-2rem))] rounded-2xl border-2 border-sky-300/85 bg-slate-950/95 p-4 text-white shadow-[0_0_34px_rgba(56,189,248,0.28)] backdrop-blur-xl">
+        <div className="absolute inset-0 z-[250] pointer-events-none flex items-end justify-center px-4 pb-[clamp(16px,8vh,60px)] sm:pb-[clamp(108px,16vh,168px)]">
+          <div className="pointer-events-auto w-[min(440px,calc(100vw-2rem))] rounded-2xl border-2 border-sky-300/85 bg-slate-950/95 p-4 sm:p-5 text-white shadow-[0_0_40px_rgba(56,189,248,0.35)] backdrop-blur-xl">
             <div className="flex items-center gap-3">
-              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl font-black ${
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black ${
                 starterSelectionCandidate.id === 'pikachu'
                   ? 'bg-amber-400 text-slate-950'
                   : starterSelectionCandidate.id === 'charmander'
@@ -1367,20 +1388,40 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={onCancelStarterSelection}
-                className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-black text-white transition hover:bg-slate-700"
+                id="btn-cancel-starter"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancelStarterSelection();
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  onCancelStarterSelection();
+                }}
+                className="min-h-[44px] rounded-xl border border-slate-600 bg-slate-800 px-4 py-2.5 text-sm font-black text-white transition active:bg-slate-700 hover:bg-slate-700 cursor-pointer flex items-center justify-center select-none"
               >
                 CANCEL
               </button>
               <button
                 type="button"
-                onClick={onConfirmStarterSelection}
-                className="rounded-xl border border-sky-300 bg-sky-500 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-sky-400"
+                id="btn-select-starter"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfirmStarterSelection();
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  onConfirmStarterSelection();
+                }}
+                className="min-h-[44px] rounded-xl border border-sky-300 bg-sky-500 px-4 py-2.5 text-sm font-black text-slate-950 transition active:bg-sky-400 hover:bg-sky-400 cursor-pointer shadow-lg shadow-sky-500/20 flex items-center justify-center select-none"
               >
                 SELECT {starterSelectionCandidate.name.toUpperCase()}
               </button>
             </div>
-            <div className="mt-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-500">Enter confirms • Esc cancels</div>
+            {controlMode === 'mobile' ? (
+              <div className="mt-2 text-center text-[10px] font-bold text-sky-200/80">Tap Select to confirm or Cancel to choose another</div>
+            ) : (
+              <div className="mt-2 text-center text-[9px] font-bold uppercase tracking-wider text-slate-500">Enter confirms • Esc cancels</div>
+            )}
           </div>
         </div>
       )}
@@ -1420,35 +1461,44 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
 
       {showBigMap && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-5 pointer-events-auto select-none animate-fadeIn">
-          <div className="bg-slate-900 border-2 border-amber-400/90 rounded-3xl shadow-[0_0_50px_rgba(251,191,36,0.3)] w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden text-white">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[300] flex items-center justify-center p-2 sm:p-4 pointer-events-auto select-none animate-fadeIn">
+          <div className="bg-slate-900 border-2 border-amber-400/90 rounded-2xl sm:rounded-3xl shadow-[0_0_50px_rgba(251,191,36,0.3)] w-full max-w-6xl h-[94vh] max-h-[94vh] flex flex-col overflow-hidden text-white">
             {/* Map Header */}
-            <div className="p-3.5 bg-slate-950/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center text-amber-400 shadow-inner">
-                  <Compass className="w-6 h-6 animate-spin-slow" />
+            <div className="p-2.5 sm:p-3.5 bg-slate-950/95 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-amber-400/20 border border-amber-400/50 flex items-center justify-center text-amber-400 shadow-inner shrink-0">
+                  <Compass className="w-5 h-5 sm:w-6 sm:h-6 animate-spin-slow" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-black tracking-wide text-amber-300">
-                      CURRENT WORLD MAP & FAST TRAVEL
+                    <h2 className="text-sm sm:text-lg font-black tracking-wide text-amber-300">
+                      WORLD MAP & FAST TRAVEL
                     </h2>
                     <span className="hidden sm:inline-flex items-center gap-1 bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px] font-black uppercase px-2 py-0.5 rounded-full animate-pulse">
-                      <Zap className="w-2.5 h-2.5" /> Current-world atlas
+                      <Zap className="w-2.5 h-2.5" /> Atlas
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
-                    Detailed roads, terrain, landmarks and safe destination travel
+                  <p className="text-[10px] sm:text-xs text-slate-400">
+                    {controlMode === 'mobile' ? 'Tap map to fast travel • Pinch/drag to explore' : 'Detailed roads, terrain, landmarks and safe destination travel'}
                   </p>
                 </div>
               </div>
 
-              {/* Filter Tabs */}
-              <div className="flex items-center gap-1.5 bg-slate-800/90 p-1 rounded-xl border border-slate-700">
+              {/* Filter / Quick-Jump Tabs */}
+              <div className="flex items-center gap-1 bg-slate-800/90 p-1 rounded-xl border border-slate-700 overflow-x-auto max-w-full">
                 <button
+                  type="button"
                   id="tab-filter-all"
-                  onClick={() => setMapFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setMapFilter('all');
+                    resetFullMapZoom();
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setMapFilter('all');
+                    resetFullMapZoom();
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition shrink-0 ${
                     mapFilter === 'all'
                       ? 'bg-amber-400 text-slate-950 shadow'
                       : 'text-slate-300 hover:text-white'
@@ -1457,9 +1507,20 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   All
                 </button>
                 <button
+                  type="button"
                   id="tab-filter-springfield"
-                  onClick={() => setMapFilter('springfield')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setMapFilter('springfield');
+                    setFullMapZoom(1.4);
+                    setFullMapViewCenter({ x: -160, z: 20 });
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setMapFilter('springfield');
+                    setFullMapZoom(1.4);
+                    setFullMapViewCenter({ x: -160, z: 20 });
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition shrink-0 ${
                     mapFilter === 'springfield'
                       ? 'bg-amber-500 text-slate-950 shadow'
                       : 'text-slate-300 hover:text-white'
@@ -1468,31 +1529,64 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   Springfield
                 </button>
                 <button
+                  type="button"
                   id="tab-filter-goldenrod"
-                  onClick={() => setMapFilter('goldenrod')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setMapFilter('goldenrod');
+                    setFullMapZoom(1.4);
+                    setFullMapViewCenter({ x: 170, z: 20 });
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setMapFilter('goldenrod');
+                    setFullMapZoom(1.4);
+                    setFullMapViewCenter({ x: 170, z: 20 });
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition shrink-0 ${
                     mapFilter === 'goldenrod'
                       ? 'bg-cyan-400 text-slate-950 shadow'
                       : 'text-slate-300 hover:text-white'
                   }`}
                 >
-                  Goldenrod City
+                  Goldenrod
                 </button>
                 <button
+                  type="button"
                   id="tab-filter-highway"
-                  onClick={() => setMapFilter('highway')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setMapFilter('highway');
+                    setFullMapZoom(1.15);
+                    setFullMapViewCenter({ x: 0, z: 10 });
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setMapFilter('highway');
+                    setFullMapZoom(1.15);
+                    setFullMapViewCenter({ x: 0, z: 10 });
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition shrink-0 ${
                     mapFilter === 'highway'
                       ? 'bg-emerald-400 text-slate-950 shadow'
                       : 'text-slate-300 hover:text-white'
                   }`}
                 >
-                  Countryside & Bridges
+                  Bridges
                 </button>
                 <button
+                  type="button"
                   id="tab-filter-airport"
-                  onClick={() => setMapFilter('airport')}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  onClick={() => {
+                    setMapFilter('airport');
+                    setFullMapZoom(1.6);
+                    setFullMapViewCenter({ x: 0, z: -830 });
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setMapFilter('airport');
+                    setFullMapZoom(1.6);
+                    setFullMapViewCenter({ x: 0, z: -830 });
+                  }}
+                  className={`px-2.5 sm:px-3 py-1 rounded-lg text-[11px] sm:text-xs font-bold transition shrink-0 ${
                     mapFilter === 'airport'
                       ? 'bg-sky-400 text-slate-950 shadow'
                       : 'text-slate-300 hover:text-white'
@@ -1502,22 +1596,29 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </button>
               </div>
 
-              {/* Close Button */}
+              {/* Close Button - High priority touch & click */}
               <button
+                type="button"
                 id="btn-close-big-map"
                 onClick={() => setShowBigMap(false)}
-                className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition flex items-center gap-1.5 text-xs font-bold"
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowBigMap(false);
+                }}
+                className="min-w-[44px] min-h-[44px] px-3 py-2 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 rounded-xl text-slate-200 hover:text-white transition flex items-center justify-center gap-1 text-xs font-black border border-slate-700/80 cursor-pointer shadow-md shrink-0"
                 title="Close Map (TAB or ESC)"
+                aria-label="Close Map"
               >
-                <span className="hidden sm:inline bg-slate-800 px-1.5 py-0.5 rounded text-[10px]">ESC</span>
-                <X className="w-5 h-5" />
+                <span className="hidden sm:inline bg-slate-900 px-1.5 py-0.5 rounded text-[10px] text-slate-400">ESC</span>
+                <X className="w-5 h-5 text-amber-300" />
               </button>
             </div>
 
-            {/* Map Body Content: Split into Canvas and Fast Travel Destination Drawer */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-950">
+            {/* Map Body Content: On mobile, full-width canvas; on desktop, split canvas + drawer */}
+            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden bg-slate-950 min-h-0">
               {/* Left/Center: Interactive Map Canvas */}
-              <div className="flex-1 relative overflow-hidden flex items-center justify-center p-3">
+              <div className="flex-1 relative overflow-hidden flex items-center justify-center p-2 sm:p-3 min-h-0">
                 <div
                   id="interactive-world-map-canvas"
                   onWheel={(e) => {
@@ -1526,16 +1627,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     const rect = e.currentTarget.getBoundingClientRect();
                     const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
                     const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
-                    // Trackpads produce many small deltas while mouse wheels produce
-                    // fewer large ones. Exponential scaling keeps both smooth and makes
-                    // zoom direction platform-independent.
                     const scale = Math.exp(-e.deltaY * 0.0018);
                     setFullMapZoomAt(clampedFullMapZoom * scale, normX, normY);
                   }}
                   onPointerDown={(e) => {
+                    if (e.pointerType === 'touch') return;
                     if (e.button !== 0) return;
-                    // Buttons/fields/POI markers own their own clicks. Do not start a
-                    // background-map pan when the press began on an interactive control.
                     const target = e.target as Element | null;
                     if (target?.closest('button, input, select, textarea, a, [role="button"]')) return;
                     e.preventDefault();
@@ -1552,6 +1649,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     setIsFullMapDragging(true);
                   }}
                   onPointerMove={(e) => {
+                    if (e.pointerType === 'touch') return;
                     e.stopPropagation();
                     const rect = e.currentTarget.getBoundingClientRect();
                     const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -1564,18 +1662,13 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     const dy = e.clientY - drag.startClientY;
                     if (!drag.moved && Math.hypot(dx, dy) < 5) return;
                     drag.moved = true;
-                    // Presentation-only pan. These values are React map-view state and
-                    // never write to playerPos, a vehicle/aircraft transform or camera.
-                    // Content follows the hand: dragging left moves the map left, which
-                    // means the world-space viewport centre moves right.
                     const wantedX = drag.startCenterX - (dx / Math.max(1, rect.width)) * fullWorldWidth;
                     const wantedZ = drag.startCenterZ - (dy / Math.max(1, rect.height)) * fullWorldHeight;
                     setFullMapViewCenter(clampFullMapCenter(wantedX, wantedZ));
                   }}
                   onPointerUp={(e) => {
+                    if (e.pointerType === 'touch') return;
                     const drag = fullMapDragRef.current;
-                    // If this press began on a POI/button/control, the map never took
-                    // ownership of the pointer. Leave its native click completely alone.
                     if (!drag || drag.pointerId !== e.pointerId) return;
                     e.preventDefault();
                     e.stopPropagation();
@@ -1584,9 +1677,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
                     setIsFullMapDragging(false);
 
-                    // A real drag ONLY pans the UI map. A stationary press/release is
-                    // the one and only path that converts screen coordinates into an
-                    // explicit map-click fast-travel request.
                     if (wasMoved) return;
                     const rect = e.currentTarget.getBoundingClientRect();
                     const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
@@ -1601,6 +1691,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     setShowBigMap(false);
                   }}
                   onPointerCancel={(e) => {
+                    if (e.pointerType === 'touch') return;
                     e.preventDefault();
                     e.stopPropagation();
                     fullMapDragRef.current = null;
@@ -1610,41 +1701,143 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                   onPointerLeave={() => {
                     if (!fullMapDragRef.current) setHoverWorldCoords(null);
                   }}
-                  className={`relative bg-[#294434] border-2 border-slate-700/80 rounded-2xl overflow-hidden shadow-2xl w-full max-w-[900px] ${isFullMapDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-                  style={{ aspectRatio: '8 / 5', touchAction: 'none' }}
+                  onTouchStart={(e) => {
+                    const target = e.target as Element | null;
+                    if (target?.closest('button, input, select, textarea, a, [role="button"]')) return;
+                    e.stopPropagation();
+                    if (e.touches.length === 1) {
+                      const t = e.touches[0];
+                      touchMapRef.current = {
+                        startX: t.clientX,
+                        startY: t.clientY,
+                        startCenterX: centerX,
+                        startCenterZ: centerZ,
+                        initialPinchDist: 0,
+                        initialZoom: clampedFullMapZoom,
+                        moved: false,
+                        isPinch: false,
+                      };
+                      setIsFullMapDragging(true);
+                    } else if (e.touches.length >= 2) {
+                      const t1 = e.touches[0];
+                      const t2 = e.touches[1];
+                      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                      touchMapRef.current = {
+                        startX: (t1.clientX + t2.clientX) * 0.5,
+                        startY: (t1.clientY + t2.clientY) * 0.5,
+                        startCenterX: centerX,
+                        startCenterZ: centerZ,
+                        initialPinchDist: Math.max(10, dist),
+                        initialZoom: clampedFullMapZoom,
+                        moved: true,
+                        isPinch: true,
+                      };
+                      setIsFullMapDragging(true);
+                    }
+                  }}
+                  onTouchMove={(e) => {
+                    const drag = touchMapRef.current;
+                    if (!drag) return;
+                    e.stopPropagation();
+
+                    if (e.touches.length >= 2) {
+                      const t1 = e.touches[0];
+                      const t2 = e.touches[1];
+                      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                      if (!drag.isPinch) {
+                        drag.isPinch = true;
+                        drag.initialPinchDist = Math.max(10, dist);
+                        drag.initialZoom = clampedFullMapZoom;
+                      }
+                      const ratio = dist / Math.max(10, drag.initialPinchDist);
+                      const newZoom = Math.max(1, Math.min(4.0, drag.initialZoom * ratio));
+                      setFullMapZoom(newZoom);
+                    } else if (e.touches.length === 1 && !drag.isPinch) {
+                      const t = e.touches[0];
+                      const dx = t.clientX - drag.startX;
+                      const dy = t.clientY - drag.startY;
+                      if (!drag.moved && Math.hypot(dx, dy) > 6) {
+                        drag.moved = true;
+                      }
+                      if (drag.moved) {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const wantedX = drag.startCenterX - (dx / Math.max(1, rect.width)) * fullWorldWidth;
+                        const wantedZ = drag.startCenterZ - (dy / Math.max(1, rect.height)) * fullWorldHeight;
+                        setFullMapViewCenter(clampFullMapCenter(wantedX, wantedZ));
+                      }
+                    }
+                  }}
+                  onTouchEnd={(e) => {
+                    const drag = touchMapRef.current;
+                    if (!drag) return;
+                    e.stopPropagation();
+
+                    if (!drag.moved && !drag.isPinch && e.changedTouches.length > 0) {
+                      const touch = e.changedTouches[0];
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      const normX = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+                      const normY = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
+                      const world = fullPercentToWorld(normX, normY);
+                      onFastTravel({
+                        x: world.x,
+                        z: world.z,
+                        name: `Map point [${Math.round(world.x)}, ${Math.round(world.z)}]`,
+                        mapClick: true,
+                      });
+                      setShowBigMap(false);
+                    }
+                    touchMapRef.current = null;
+                    setIsFullMapDragging(false);
+                  }}
+                  onTouchCancel={() => {
+                    touchMapRef.current = null;
+                    setIsFullMapDragging(false);
+                  }}
+                  className={`relative bg-[#294434] border-2 border-slate-700/80 rounded-2xl overflow-hidden shadow-2xl ${
+                    controlMode === 'mobile'
+                      ? 'w-full h-full flex-1'
+                      : 'w-full max-w-[900px]'
+                  } ${isFullMapDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+                  style={controlMode === 'mobile' ? { touchAction: 'none' } : { aspectRatio: '8 / 5', touchAction: 'none' }}
                 >
+                  {/* Floating Zoom & Recenter Controls - Touch friendly */}
                   <div
-                    className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-xl border border-slate-600/80 bg-slate-950/88 p-1 shadow-lg"
+                    className="absolute right-2 top-2 z-50 flex items-center gap-1 rounded-2xl border border-slate-600/80 bg-slate-950/90 p-1 shadow-2xl backdrop-blur-md pointer-events-auto"
                     onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
-                      className="h-7 w-7 rounded-lg bg-slate-800 text-sm font-black text-white hover:bg-slate-700"
+                      className="h-8 w-8 sm:h-7 sm:w-7 min-w-[32px] rounded-xl bg-slate-800 text-base sm:text-sm font-black text-white active:bg-slate-700 flex items-center justify-center shadow cursor-pointer"
                       onClick={() => setFullMapZoomAt(clampedFullMapZoom / 1.35)}
+                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setFullMapZoomAt(clampedFullMapZoom / 1.35); }}
                       aria-label="Zoom map out"
                       title="Zoom out"
                     >−</button>
                     <button
                       type="button"
-                      className="min-w-[52px] h-7 rounded-lg bg-slate-900 px-2 text-[10px] font-black text-amber-300 hover:bg-slate-800"
+                      className="min-w-[48px] sm:min-w-[52px] h-8 sm:h-7 rounded-xl bg-slate-900 px-1.5 text-[11px] sm:text-[10px] font-black text-amber-300 active:bg-slate-800 flex items-center justify-center border border-slate-700/60 cursor-pointer"
                       onClick={resetFullMapZoom}
+                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); resetFullMapZoom(); }}
                       aria-label="Reset map zoom"
                       title="Fit complete world"
                     >{Math.round(clampedFullMapZoom * 100)}%</button>
                     <button
                       type="button"
-                      className="h-7 w-7 rounded-lg bg-slate-800 text-sm font-black text-white hover:bg-slate-700"
+                      className="h-8 w-8 sm:h-7 sm:w-7 min-w-[32px] rounded-xl bg-slate-800 text-base sm:text-sm font-black text-white active:bg-slate-700 flex items-center justify-center shadow cursor-pointer"
                       onClick={() => setFullMapZoomAt(clampedFullMapZoom * 1.35)}
+                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setFullMapZoomAt(clampedFullMapZoom * 1.35); }}
                       aria-label="Zoom map in"
                       title="Zoom in"
                     >+</button>
                     <button
                       type="button"
-                      className="h-7 min-w-[34px] rounded-lg bg-slate-800 px-1.5 text-[10px] font-black text-cyan-200 hover:bg-slate-700"
+                      className="h-8 sm:h-7 min-w-[38px] sm:min-w-[34px] rounded-xl bg-cyan-950/90 border border-cyan-500/50 px-1.5 text-[11px] sm:text-[10px] font-black text-cyan-300 active:bg-cyan-900 flex items-center justify-center shadow cursor-pointer"
                       onClick={() => setFullMapViewCenter({ x: playerPos.x, z: playerPos.z })}
+                      onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setFullMapViewCenter({ x: playerPos.x, z: playerPos.z }); }}
                       aria-label="Recenter map on player"
-                      title="Recenter on player (R)"
+                      title="Recenter on player"
                     >YOU</button>
                   </div>
                   {/* Cached static geometry is generated once from the current authored world. */}
@@ -1698,22 +1891,21 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     ))}
                   </svg>
 
-                  {/* District titles are anchored to their real world positions so expanding
-                      the map for the airport does not leave city labels floating over the runway. */}
-                  <div className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-xl bg-slate-950/72 border border-amber-400/25 px-3 py-0.5" style={{ left: `${springfieldTitlePos.x}%`, top: `${springfieldTitlePos.y}%` }}>
-                    <div className="text-sm font-black text-amber-300 tracking-wider">SPRINGFIELD</div>
-                    <div className="text-[8px] leading-tight font-bold text-slate-300">Evergreen Terrace • Downtown • Community Field</div>
+                  {/* World District Labels */}
+                  <div className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none rounded-xl bg-slate-950/72 border border-amber-400/25 px-2.5 sm:px-3 py-0.5" style={{ left: `${springfieldTitlePos.x}%`, top: `${springfieldTitlePos.y}%` }}>
+                    <div className="text-xs sm:text-sm font-black text-amber-300 tracking-wider">SPRINGFIELD</div>
+                    <div className="hidden xs:block text-[8px] leading-tight font-bold text-slate-300">Evergreen Terrace • Downtown</div>
                   </div>
-                  <div className="absolute -translate-x-1/2 -translate-y-1/2 text-right pointer-events-none rounded-xl bg-slate-950/72 border border-cyan-400/25 px-3 py-0.5" style={{ left: `${goldenrodTitlePos.x}%`, top: `${goldenrodTitlePos.y}%` }}>
-                    <div className="text-sm font-black text-cyan-300 tracking-wider">GOLDENROD CITY</div>
-                    <div className="text-[8px] leading-tight font-bold text-slate-300">Civic district • Stations • Oak's Lab</div>
+                  <div className="absolute -translate-x-1/2 -translate-y-1/2 text-right pointer-events-none rounded-xl bg-slate-950/72 border border-cyan-400/25 px-2.5 sm:px-3 py-0.5" style={{ left: `${goldenrodTitlePos.x}%`, top: `${goldenrodTitlePos.y}%` }}>
+                    <div className="text-xs sm:text-sm font-black text-cyan-300 tracking-wider">GOLDENROD CITY</div>
+                    <div className="hidden xs:block text-[8px] leading-tight font-bold text-slate-300">Civic district • Oak's Lab</div>
                   </div>
-                  <div className="absolute -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none rounded-xl bg-slate-950/78 border border-sky-400/30 px-3 py-1.5" style={{ left: `${airportTitlePos.x}%`, top: `${airportTitlePos.y}%` }}>
-                    <div className="text-sm font-black text-sky-300 tracking-wider">SPRINGFIELD REGIONAL AIRPORT</div>
-                    <div className="text-[9px] font-bold text-slate-300">Terminal • Apron • Expansion stands • Runway 09/27</div>
+                  <div className="absolute -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none rounded-xl bg-slate-950/78 border border-sky-400/30 px-2.5 sm:px-3 py-1" style={{ left: `${airportTitlePos.x}%`, top: `${airportTitlePos.y}%` }}>
+                    <div className="text-xs sm:text-sm font-black text-sky-300 tracking-wider">SPRINGFIELD AIRPORT</div>
+                    <div className="hidden xs:block text-[8px] font-bold text-slate-300">Terminal • Runway 09/27</div>
                   </div>
 
-                  {/* Landmark pins and selected always-visible labels. */}
+                  {/* Landmark pins */}
                   {landmarks
                     .filter((lm) => {
                       if (mapFilter === 'springfield') return isSpringfieldLandmark(lm.category);
@@ -1731,21 +1923,32 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                           type="button"
                           key={lm.id}
                           onPointerDown={(e) => e.stopPropagation()}
-                          onClick={(e) => { e.stopPropagation(); travelToLandmark(lm); setShowBigMap(false); }}
+                          onTouchStart={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            travelToLandmark(lm);
+                            setShowBigMap(false);
+                          }}
+                          onTouchEnd={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            travelToLandmark(lm);
+                            setShowBigMap(false);
+                          }}
                           onMouseEnter={() => setActiveHighlightId(lm.id)}
                           onMouseLeave={() => setActiveHighlightId(null)}
-                          className="group absolute transform -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center"
+                          className="group absolute transform -translate-x-1/2 -translate-y-1/2 z-20 flex items-center justify-center min-w-[32px] min-h-[32px] cursor-pointer"
                           style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
                           title={`${lm.name} • safe fast travel`}
                           aria-label={`Fast travel to ${lm.name}`}
                         >
                           {isHighlighted && <span className="absolute w-8 h-8 rounded-full border-2 border-amber-300 animate-ping pointer-events-none" />}
                           <span
-                            className={`block w-4 h-4 rounded-[4px] border-2 border-white shadow-[0_0_8px_rgba(0,0,0,0.9)] transition-transform ${isHighlighted ? 'scale-150 ring-2 ring-amber-300' : 'group-hover:scale-150'}`}
+                            className={`block w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-[4px] border-2 border-white shadow-[0_0_8px_rgba(0,0,0,0.9)] transition-transform ${isHighlighted ? 'scale-150 ring-2 ring-amber-300' : 'group-hover:scale-150'}`}
                             style={{ backgroundColor: lm.color }}
                           />
                           {(showPermanentLabel || isHighlighted) && (
-                            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 rounded bg-slate-950/88 border border-slate-600/80 px-1.5 py-0.5 text-[8px] leading-tight font-black tracking-wide text-white whitespace-nowrap shadow-lg pointer-events-none">
+                            <span className="absolute left-1/2 top-full mt-1 -translate-x-1/2 rounded bg-slate-950/88 border border-slate-600/80 px-1 sm:px-1.5 py-0.5 text-[7px] sm:text-[8px] leading-tight font-black tracking-wide text-white whitespace-nowrap shadow-lg pointer-events-none">
                               {shortMapLabel(lm)}
                             </span>
                           )}
@@ -1766,6 +1969,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     );
                   })}
 
+                  {/* Player Position Marker */}
                   {(() => {
                     const p = worldToFullPercent(playerPos.x, playerPos.z);
                     return (
@@ -1780,7 +1984,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                             style={{ transform: `rotate(${mapArrowRotation}rad)`, transition: 'transform 110ms linear' }}
                           />
                         </div>
-                        <span className="bg-slate-950/90 border border-amber-400 text-amber-300 px-1.5 py-0.5 rounded text-[9px] font-black uppercase mt-1 shadow-md">YOU</span>
+                        <span className="bg-slate-950/90 border border-amber-400 text-amber-300 px-1 sm:px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black uppercase mt-1 shadow-md">YOU</span>
                       </div>
                     );
                   })()}
@@ -1802,156 +2006,175 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                     );
                   })()}
 
-                  <div className="absolute bottom-2 left-2 rounded-lg bg-slate-950/78 border border-slate-700 px-2 py-1 text-[8px] text-slate-300 pointer-events-none">
-                    Wheel/trackpad to zoom • Drag to pan • R / YOU to recenter • click without dragging to travel
+                  <div className="absolute bottom-2 left-2 rounded-lg bg-slate-950/85 border border-slate-700 px-2 py-1 text-[8px] sm:text-[9px] text-slate-300 pointer-events-none">
+                    {controlMode === 'mobile' ? 'Tap map to travel • Pinch to zoom • Drag to pan' : 'Wheel to zoom • Drag to pan • Click map to travel'}
                   </div>
                 </div>
               </div>
 
-              {/* Right: Fast Travel Destination Explorer Drawer */}
-              <div className="w-full lg:w-80 bg-slate-900/90 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col p-4 overflow-hidden">
-                <div className="mb-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-black text-amber-400 tracking-wide uppercase flex items-center gap-1.5">
-                      <Navigation className="w-3.5 h-3.5 text-amber-400" /> Fast Travel Destinations
-                    </h3>
-                    <span className="text-[10px] text-slate-400 font-bold">
-                      {landmarks.length} Places
-                    </span>
+              {/* Right: Fast Travel Destination Explorer Drawer (Hidden on Mobile) */}
+              {controlMode !== 'mobile' && (
+                <div className="w-full lg:w-80 bg-slate-900/90 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col p-4 overflow-hidden">
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-black text-amber-400 tracking-wide uppercase flex items-center gap-1.5">
+                        <Navigation className="w-3.5 h-3.5 text-amber-400" /> Fast Travel Destinations
+                      </h3>
+                      <span className="text-[10px] text-slate-400 font-bold">
+                        {landmarks.length} Places
+                      </span>
+                    </div>
+
+                    {/* Search bar */}
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 transform -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search landmarks or buildings..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
+                      />
+                    </div>
                   </div>
 
-                  {/* Search bar */}
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 transform -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="Search landmarks or buildings..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
-                    />
-                  </div>
-                </div>
+                  {/* Destinations Scrollable List */}
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                    {landmarks
+                      .filter((lm) => {
+                        if (searchQuery.trim()) {
+                          return lm.name.toLowerCase().includes(searchQuery.toLowerCase());
+                        }
+                        if (mapFilter === 'springfield') return isSpringfieldLandmark(lm.category);
+                        if (mapFilter === 'goldenrod') return isGoldenrodLandmark(lm.category);
+                        if (mapFilter === 'highway') return isHighwayLandmark(lm.category);
+                        if (mapFilter === 'airport') return isAirportLandmark(lm.category);
+                        return true;
+                      })
+                      .map((lm) => {
+                        const isSpringfield = isSpringfieldLandmark(lm.category);
+                        const isGoldenrod = isGoldenrodLandmark(lm.category);
+                        const isAirport = isAirportLandmark(lm.category);
 
-                {/* Destinations Scrollable List */}
-                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-xs">
-                  {landmarks
-                    .filter((lm) => {
-                      if (searchQuery.trim()) {
-                        return lm.name.toLowerCase().includes(searchQuery.toLowerCase());
-                      }
-                      if (mapFilter === 'springfield') return isSpringfieldLandmark(lm.category);
-                      if (mapFilter === 'goldenrod') return isGoldenrodLandmark(lm.category);
-                      if (mapFilter === 'highway') return isHighwayLandmark(lm.category);
-                      if (mapFilter === 'airport') return isAirportLandmark(lm.category);
-                      return true;
-                    })
-                    .map((lm) => {
-                      const isSpringfield = isSpringfieldLandmark(lm.category);
-                      const isGoldenrod = isGoldenrodLandmark(lm.category);
-                      const isBridge = lm.category === 'highway';
-                      const isAirport = isAirportLandmark(lm.category);
-
-                      return (
-                        <div
-                          key={lm.id}
-                          onClick={() => {
-                            travelToLandmark(lm);
-                            setShowBigMap(false);
-                          }}
-                          onMouseEnter={() => setActiveHighlightId(lm.id)}
-                          onMouseLeave={() => setActiveHighlightId(null)}
-                          className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-between group ${
-                            activeHighlightId === lm.id
-                              ? 'bg-amber-500/20 border-amber-400'
-                              : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 pr-2">
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0 shadow-sm"
-                              style={{ backgroundColor: lm.color }}
-                            />
-                            <div className="truncate">
-                              <div className="font-bold text-slate-100 group-hover:text-amber-300 truncate">
-                                {lm.name}
-                              </div>
-                              <div className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
-                                <span>{isAirport ? 'Airport District' : isSpringfield ? 'Springfield' : isGoldenrod ? 'Goldenrod' : 'Highway/Bridge'}</span>
-                                <span>•</span>
-                                <span>[{Math.round(lm.x)}, {Math.round(lm.z)}]</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            id={`btn-warp-${lm.id}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
+                        return (
+                          <div
+                            key={lm.id}
+                            onClick={() => {
                               travelToLandmark(lm);
                               setShowBigMap(false);
                             }}
-                            className="shrink-0 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-400 hover:text-slate-950 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center gap-1 shadow-sm"
+                            onMouseEnter={() => setActiveHighlightId(lm.id)}
+                            onMouseLeave={() => setActiveHighlightId(null)}
+                            className={`p-2 rounded-xl border transition cursor-pointer flex items-center justify-between group ${
+                              activeHighlightId === lm.id
+                                ? 'bg-amber-500/20 border-amber-400'
+                                : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
+                            }`}
                           >
-                            <Send className="w-2.5 h-2.5" /> Warp
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <div className="flex items-center gap-2 min-w-0 pr-2">
+                              <span
+                                className="w-3 h-3 rounded-full shrink-0 shadow-sm"
+                                style={{ backgroundColor: lm.color }}
+                              />
+                              <div className="truncate">
+                                <div className="font-bold text-slate-100 group-hover:text-amber-300 truncate">
+                                  {lm.name}
+                                </div>
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1 font-mono">
+                                  <span>{isAirport ? 'Airport District' : isSpringfield ? 'Springfield' : isGoldenrod ? 'Goldenrod' : 'Highway/Bridge'}</span>
+                                  <span>•</span>
+                                  <span>[{Math.round(lm.x)}, {Math.round(lm.z)}]</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              id={`btn-warp-${lm.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                travelToLandmark(lm);
+                                setShowBigMap(false);
+                              }}
+                              className="shrink-0 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-400 hover:text-slate-950 text-amber-300 border border-amber-500/40 rounded-lg text-[10px] font-black uppercase tracking-wider transition flex items-center gap-1 shadow-sm"
+                            >
+                              <Send className="w-2.5 h-2.5" /> Warp
+                            </button>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Map Footer Bar with Quick Hub Teleport Buttons */}
-            <div className="p-3 bg-slate-950/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 px-4 sm:px-6">
-              <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Springfield
+            <div className="p-2.5 sm:p-3 bg-slate-950/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 px-3 sm:px-6 shrink-0">
+              <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs">
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" /> Springfield
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" /> Goldenrod City
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shrink-0" /> Goldenrod
                 </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Bridges & Farmland
+                <span className="hidden xs:flex items-center gap-1 sm:gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" /> Bridges
                 </span>
               </div>
 
               {/* Quick Jump Shortcuts */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
+                  type="button"
                   id="btn-quick-warp-goldenrod"
                   onClick={() => {
                     onFastTravel({ x: 170, z: -25, name: 'Goldenrod Civic Plaza' });
                     setShowBigMap(false);
                   }}
-                  className="px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500 text-cyan-300 hover:text-slate-950 border border-cyan-500/50 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    onFastTravel({ x: 170, z: -25, name: 'Goldenrod Civic Plaza' });
+                    setShowBigMap(false);
+                  }}
+                  className="px-2 sm:px-2.5 py-1 bg-cyan-500/20 hover:bg-cyan-500 active:bg-cyan-400 text-cyan-300 hover:text-slate-950 border border-cyan-500/50 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                 >
-                  ⚡ Warp Goldenrod
+                  ⚡ Goldenrod
                 </button>
                 <button
+                  type="button"
                   id="btn-quick-warp-springfield"
                   onClick={() => {
                     onFastTravel({ x: -210, z: -20, name: 'Springfield Town Square' });
                     setShowBigMap(false);
                   }}
-                  className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/50 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    onFastTravel({ x: -210, z: -20, name: 'Springfield Town Square' });
+                    setShowBigMap(false);
+                  }}
+                  className="px-2 sm:px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500 active:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-500/50 rounded-lg text-[10px] font-bold transition flex items-center gap-1 cursor-pointer"
                 >
-                  ⚡ Warp Springfield
+                  ⚡ Springfield
                 </button>
                 {soccerLandmark && (
                   <button
+                    type="button"
                     id="btn-quick-warp-soccer"
                     onClick={() => {
                       travelToLandmark(soccerLandmark);
                       setShowBigMap(false);
                     }}
-                    className="px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/50 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      travelToLandmark(soccerLandmark);
+                      setShowBigMap(false);
+                    }}
+                    className="hidden xs:flex px-2 sm:px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500 active:bg-emerald-400 text-emerald-300 hover:text-slate-950 border border-emerald-500/50 rounded-lg text-[10px] font-bold transition items-center gap-1 cursor-pointer"
                   >
-                    ⚽ Soccer Field
+                    ⚽ Soccer
                   </button>
                 )}
-                <div className="font-semibold text-slate-300 pl-2">
-                  Player: <b className="text-amber-400 font-mono">[{Math.round(playerPos.x)}, {Math.round(playerPos.z)}]</b>
+                <div className="font-semibold text-slate-300 pl-1 sm:pl-2 text-[10px] sm:text-xs font-mono">
+                  [{Math.round(playerPos.x)}, {Math.round(playerPos.z)}]
                 </div>
               </div>
             </div>

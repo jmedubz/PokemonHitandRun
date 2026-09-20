@@ -20,6 +20,8 @@ export interface RemotePlayer {
   vehicleId: string | null;
   inAircraft: boolean;
   aircraftId: string | null;
+  onToothless: boolean;
+  toothlessMounting: boolean;
   hp: number;
   animTime: number;
   lastUpdate: number;
@@ -41,7 +43,7 @@ export interface MultiplayerClientState {
   lastError: string | null;
 }
 
-interface LocalPlayerSyncData {
+export interface LocalPlayerSyncData {
   position: THREE.Vector3;
   yaw: number;
   animState: PokemonAnimState;
@@ -52,6 +54,20 @@ interface LocalPlayerSyncData {
   vehicleId: string | null;
   inAircraft: boolean;
   aircraftId: string | null;
+  onToothless: boolean;
+  toothlessMounting: boolean;
+  toothlessState?: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    speed: number;
+    verticalSpeed: number;
+    wingFlap: number;
+    airborne: boolean;
+  } | null;
   hp: number;
   activeVehicle?: Vehicle | null;
   activeAircraft?: AirportAircraft | null;
@@ -131,6 +147,21 @@ export class MultiplayerManager {
   private remotePlayers = new Map<string, RemotePlayer>();
   private vehicleOwners = new Map<string, string>(); // vehicleId -> playerId
   private aircraftOwners = new Map<string, string>(); // aircraftId -> playerId
+  public toothlessOwner: string | null = null; // playerId of toothless rider
+  public remoteToothlessState: {
+    playerId: string;
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    roll: number;
+    speed: number;
+    verticalSpeed: number;
+    wingFlap: number;
+    airborne: boolean;
+    lastTime: number;
+  } | null = null;
   private remoteVehicleStates = new Map<string, {
     x: number; y: number; z: number; yaw: number; pitch: number; roll: number;
     speed: number; steer: number; wrecked: boolean; damage: number; lastTime: number;
@@ -143,6 +174,8 @@ export class MultiplayerManager {
   private lastLocalSyncTime = 0;
   private lastLocalPos = new THREE.Vector3();
   private scene: THREE.Scene | null = null;
+  private pingTimer: number | null = null;
+  private visibilityListener: (() => void) | null = null;
 
   public onStateChange?: (state: MultiplayerClientState) => void;
   public onNotification?: (title: string, message: string) => void;
@@ -150,7 +183,31 @@ export class MultiplayerManager {
   public onSpawnJoiner?: (spawnPos: { x: number; y: number; z: number; yaw: number }) => void;
   public onPropKnocked?: (propId: string, pos: THREE.Vector3, rot: THREE.Quaternion, vel: THREE.Vector3) => void;
 
-  constructor() {}
+  constructor() {
+    // Keepalive and iOS Safari background tab recovery
+    if (typeof window !== 'undefined') {
+      this.visibilityListener = () => {
+        if (document.visibilityState === 'visible' && this.state.isInRoom) {
+          if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.log('[Multiplayer] Tab became visible, reconnecting socket...');
+            this.connect(() => {});
+          }
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityListener);
+    }
+  }
+
+  public destroy() {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+    if (this.visibilityListener && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityListener);
+    }
+    this.leaveRoom();
+  }
 
   public initScene(scene: THREE.Scene) {
     this.scene = scene;
@@ -365,6 +422,9 @@ export class MultiplayerManager {
             if (oId) this.aircraftOwners.set(aId, String(oId));
           }
         }
+        if (data.toothlessOwner) {
+          this.toothlessOwner = String(data.toothlessOwner);
+        }
 
         this.emitState();
         this.onNotification?.('Session Joined', `Joined Room ${data.code}! Exploring together.`);
@@ -423,6 +483,8 @@ export class MultiplayerManager {
           player.vehicleId = data.vehicleId || null;
           player.inAircraft = !!data.inAircraft;
           player.aircraftId = data.aircraftId || null;
+          player.onToothless = !!data.onToothless;
+          player.toothlessMounting = !!data.toothlessMounting;
           player.hp = data.hp ?? 100;
           player.lastUpdate = Date.now();
 
@@ -499,6 +561,43 @@ export class MultiplayerManager {
         }
         break;
       }
+
+      case 'toothless_owner_changed': {
+        this.toothlessOwner = data.ownerId || null;
+        if (!data.ownerId) {
+          this.remoteToothlessState = null;
+        }
+        break;
+      }
+
+      case 'toothless_claim_result': {
+        if (!data.success) {
+          this.toothlessOwner = data.ownerId || null;
+          this.onNotification?.('Toothless Occupied', data.message || 'Toothless is currently being flown by another player.');
+        } else {
+          this.toothlessOwner = this.state.localPlayerId;
+        }
+        break;
+      }
+
+      case 'toothless_state': {
+        this.remoteToothlessState = {
+          playerId: data.playerId,
+          x: data.x,
+          y: data.y,
+          z: data.z,
+          yaw: data.yaw,
+          pitch: data.pitch || 0,
+          roll: data.roll || 0,
+          speed: data.speed || 0,
+          verticalSpeed: data.verticalSpeed || 0,
+          wingFlap: data.wingFlap || 0,
+          airborne: !!data.airborne,
+          lastTime: Date.now(),
+        };
+        this.toothlessOwner = data.playerId;
+        break;
+      }
     }
   }
 
@@ -523,6 +622,8 @@ export class MultiplayerManager {
         vehicleId: data.vehicleId || null,
         inAircraft: !!data.inAircraft,
         aircraftId: data.aircraftId || null,
+        onToothless: !!data.onToothless,
+        toothlessMounting: !!data.toothlessMounting,
         hp: data.hp ?? 100,
         animTime: 0,
         lastUpdate: Date.now(),
@@ -641,6 +742,36 @@ export class MultiplayerManager {
     this.ws.send(JSON.stringify({ type: 'aircraft_release', aircraftId }));
   }
 
+  // Check if Toothless can be mounted
+  public canMountToothless(): { allowed: boolean; reason?: string } {
+    if (!this.state.isInRoom) return { allowed: true };
+    if (!this.toothlessOwner || this.toothlessOwner === this.state.localPlayerId) {
+      return { allowed: true };
+    }
+    const owner = this.remotePlayers.get(this.toothlessOwner);
+    return {
+      allowed: false,
+      reason: `Toothless is currently being flown by ${owner?.name || 'another player'}.`,
+    };
+  }
+
+  public claimToothless() {
+    if (!this.state.isInRoom || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(JSON.stringify({ type: 'toothless_claim' }));
+  }
+
+  public releaseToothless(landingPos?: THREE.Vector3) {
+    if (!this.state.isInRoom || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    this.ws.send(
+      JSON.stringify({
+        type: 'toothless_release',
+        landingPos: landingPos ? { x: landingPos.x, y: landingPos.y, z: landingPos.z } : null,
+      })
+    );
+    this.toothlessOwner = null;
+    this.remoteToothlessState = null;
+  }
+
   public notifyPropKnocked(
     propId: string,
     pos: THREE.Vector3,
@@ -674,7 +805,8 @@ export class MultiplayerManager {
     localState: LocalPlayerSyncData,
     camera: THREE.Camera,
     vehicles: Vehicle[],
-    aircraft: AirportAircraft[]
+    aircraft: AirportAircraft[],
+    toothlessNpc?: any
   ) {
     if (!this.state.isInRoom) return;
 
@@ -702,11 +834,34 @@ export class MultiplayerManager {
           vehicleId: localState.vehicleId,
           inAircraft: localState.inAircraft,
           aircraftId: localState.aircraftId,
+          onToothless: localState.onToothless,
+          toothlessMounting: localState.toothlessMounting,
           hp: localState.hp,
           characterId: localState.characterId,
           timestamp: Date.now(),
         })
       );
+
+      // If local player is flying Toothless, broadcast Toothless state
+      if ((localState.onToothless || localState.toothlessMounting) && localState.toothlessState) {
+        const ts = localState.toothlessState;
+        this.ws.send(
+          JSON.stringify({
+            type: 'toothless_state',
+            x: Number(ts.x.toFixed(3)),
+            y: Number(ts.y.toFixed(3)),
+            z: Number(ts.z.toFixed(3)),
+            yaw: Number(ts.yaw.toFixed(3)),
+            pitch: Number((ts.pitch || 0).toFixed(3)),
+            roll: Number((ts.roll || 0).toFixed(3)),
+            speed: Number((ts.speed || 0).toFixed(2)),
+            verticalSpeed: Number((ts.verticalSpeed || 0).toFixed(2)),
+            wingFlap: Number((ts.wingFlap || 0).toFixed(3)),
+            airborne: !!ts.airborne,
+            timestamp: Date.now(),
+          })
+        );
+      }
 
       // If local player is driving vehicle, broadcast vehicle transform
       if (localState.activeVehicle && localState.vehicleId) {
@@ -836,6 +991,44 @@ export class MultiplayerManager {
         plane.crashed = state.crashed;
         plane.damage = state.damage;
         plane.onGround = state.onGround;
+      }
+    }
+
+    // 5. Update Toothless 3D position & remote rider attachment
+    if (toothlessNpc && toothlessNpc.mesh) {
+      if (this.toothlessOwner && this.toothlessOwner !== this.state.localPlayerId && this.remoteToothlessState) {
+        const ts = this.remoteToothlessState;
+        toothlessNpc.mesh.visible = true;
+        toothlessNpc.mesh.userData.specialInteractionActive = true;
+        toothlessNpc.mesh.userData.mounted = true;
+        toothlessNpc.state = 'idle';
+
+        const lerpSpeed = Math.min(1.0, dt * 14.0);
+        toothlessNpc.mesh.position.lerp(new THREE.Vector3(ts.x, ts.y, ts.z), lerpSpeed);
+        toothlessNpc.mesh.rotation.y = lerpAngle(toothlessNpc.mesh.rotation.y, ts.yaw, lerpSpeed);
+        toothlessNpc.mesh.rotation.x = THREE.MathUtils.lerp(toothlessNpc.mesh.rotation.x, ts.pitch, lerpSpeed);
+        toothlessNpc.mesh.rotation.z = THREE.MathUtils.lerp(toothlessNpc.mesh.rotation.z, ts.roll, lerpSpeed);
+
+        const wingLeft = toothlessNpc.mesh.getObjectByName('wing_left');
+        const wingRight = toothlessNpc.mesh.getObjectByName('wing_right');
+        if (wingLeft && wingRight) {
+          const flap = ts.wingFlap || Math.sin(performance.now() * 0.008 * 8.0);
+          wingLeft.rotation.z = 1.25 + flap * 0.28;
+          wingRight.rotation.z = -1.25 - flap * 0.28;
+        }
+
+        const rider = this.remotePlayers.get(this.toothlessOwner);
+        if (rider && rider.mesh) {
+          rider.mesh.visible = true;
+          const saddleOffset = new THREE.Vector3(0, 1.38, -0.10).applyEuler(toothlessNpc.mesh.rotation);
+          rider.mesh.position.copy(toothlessNpc.mesh.position).add(saddleOffset);
+          rider.mesh.rotation.copy(toothlessNpc.mesh.rotation);
+          rider.targetPosition.copy(rider.mesh.position);
+          rider.targetYaw = toothlessNpc.mesh.rotation.y;
+        }
+      } else if (!this.toothlessOwner) {
+        toothlessNpc.mesh.userData.specialInteractionActive = false;
+        toothlessNpc.mesh.userData.mounted = false;
       }
     }
   }

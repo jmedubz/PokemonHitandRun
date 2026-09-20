@@ -4233,6 +4233,15 @@ export default function App() {
       if (!toothless || !toothless.mesh.visible || toothless.state === 'knocked_out' || toothless.state === 'defeated') return;
       if (e.playerMovement.position.distanceTo(toothless.mesh.position) > 4.2) return;
 
+      if (multiplayerRef.current.state.isInRoom) {
+        const check = multiplayerRef.current.canMountToothless();
+        if (!check.allowed) {
+          showTemporaryNotification('Toothless Occupied', check.reason || 'Toothless is currently being flown by another player.');
+          return;
+        }
+        multiplayerRef.current.claimToothless();
+      }
+
       e.toothlessMounting = true;
       e.toothlessMountTimer = 0;
       e.toothlessMountStart = e.playerMovement.position.clone();
@@ -4288,6 +4297,9 @@ export default function App() {
       toothless.mesh.rotation.z = 0;
       toothless.mesh.userData.home = toothless.mesh.position.clone();
       toothless.state = 'idle';
+      if (multiplayerRef.current.state.isInRoom) {
+        multiplayerRef.current.releaseToothless(toothless.mesh.position);
+      }
       playSoundEffect('jump');
     };
 
@@ -6442,6 +6454,13 @@ export default function App() {
       if (engine.hasChosenStarter) {
         const toothless = engine.npcManager.getNPCById('cameo_toothless');
         if (toothless && toothless.mesh.visible && toothless.state !== 'knocked_out' && pos.distanceTo(toothless.mesh.position) < 4.2) {
+          if (multiplayerRef.current.state.isInRoom) {
+            const check = multiplayerRef.current.canMountToothless();
+            if (!check.allowed) {
+              setInteractionPrompt('[Toothless] Flown by another player');
+              return;
+            }
+          }
           setInteractionPrompt('[E] Mount Toothless');
           return;
         }
@@ -11373,6 +11392,7 @@ export default function App() {
       // Keep the atmospheric dome centred on the active camera so it never clips at
       // the outer edges of the playable world, even on the shorter performance far plane.
       if (multiplayerRef.current.state.isInRoom) {
+        const toothlessNpc = e.npcManager.getNPCById('cameo_toothless');
         multiplayerRef.current.update(
           dt,
           {
@@ -11386,13 +11406,28 @@ export default function App() {
             vehicleId: e.activeVehicle?.id || null,
             inAircraft: !!e.activeAircraft,
             aircraftId: e.activeAircraft?.id || null,
+            onToothless: e.toothlessMounted,
+            toothlessMounting: e.toothlessMounting,
+            toothlessState: (e.toothlessMounted || e.toothlessMounting) && toothlessNpc ? {
+              x: toothlessNpc.mesh.position.x,
+              y: toothlessNpc.mesh.position.y,
+              z: toothlessNpc.mesh.position.z,
+              yaw: e.toothlessYaw,
+              pitch: toothlessNpc.mesh.rotation.x,
+              roll: toothlessNpc.mesh.rotation.z,
+              speed: e.toothlessFlightSpeed,
+              verticalSpeed: e.toothlessVerticalSpeed,
+              wingFlap: Math.sin(time * 0.008 * 8.0),
+              airborne: toothlessNpc.mesh.position.y > 0.3,
+            } : null,
             hp: hpRef.current,
             activeVehicle: e.activeVehicle,
             activeAircraft: e.activeAircraft,
           },
           camera,
           e.vehicles,
-          e.airportAircraft
+          e.airportAircraft,
+          toothlessNpc
         );
       }
 

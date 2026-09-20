@@ -22,6 +22,8 @@ interface RemotePlayer {
   vehicleId: string | null;
   inAircraft: boolean;
   aircraftId: string | null;
+  onToothless: boolean;
+  toothlessMounting: boolean;
   hp: number;
   lastPing: number;
 }
@@ -44,6 +46,8 @@ interface Room {
   players: Map<string, RemotePlayer>;
   vehicleOwners: Map<string, string>; // vehicleId -> playerId
   aircraftOwners: Map<string, string>; // aircraftId -> playerId
+  toothlessOwner: string | null; // playerId
+  toothlessState: any | null;
   knockedProps: Map<string, KnockedProp>;
 }
 
@@ -111,17 +115,50 @@ async function startServer() {
 
   const wss = new WebSocketServer({ noServer: true });
 
+  // Heartbeat keepalive every 12 seconds to prevent proxies / iOS Safari from dropping idle sockets
+  const heartbeatTimer = setInterval(() => {
+    wss.clients.forEach((wsClient: any) => {
+      if (wsClient.isAlive === false) {
+        try { wsClient.terminate(); } catch {}
+        return;
+      }
+      wsClient.isAlive = false;
+      try {
+        wsClient.ping();
+        safeSend(wsClient, { type: 'heartbeat', timestamp: Date.now() });
+      } catch {}
+    });
+  }, 12000);
+
+  server.on('close', () => {
+    clearInterval(heartbeatTimer);
+  });
+
   server.on('upgrade', (request, socket, head) => {
-    const url = new URL(request.url || '', `http://${request.headers.host}`);
-    if (url.pathname === '/ws') {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
+    try {
+      const host = request.headers.host || '127.0.0.1:3000';
+      const url = new URL(request.url || '', `http://${host}`);
+      const pathname = url.pathname.replace(/\/+$/, '') || '/';
+
+      if (pathname === '/ws' || pathname.startsWith('/ws')) {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          (ws as any).isAlive = true;
+          wss.emit('connection', ws, request);
+        });
+      }
+    } catch (err) {
+      console.warn('[Server] WebSocket upgrade error:', err);
+      try { socket.destroy(); } catch {}
     }
   });
 
   wss.on('connection', (ws: WebSocket) => {
+    (ws as any).isAlive = true;
     const playerId = `p_${Math.random().toString(36).slice(2, 9)}`;
+
+    ws.on('pong', () => {
+      (ws as any).isAlive = true;
+    });
 
     const cleanupClient = () => {
       const mapping = clientToRoom.get(ws);
@@ -135,7 +172,7 @@ async function startServer() {
       const wasHost = player?.isHost ?? false;
       const playerName = player?.name ?? 'Player';
 
-      // Release any vehicles or aircraft owned by this player
+      // Release any vehicles, aircraft, or Toothless dragon owned by this player
       for (const [vId, ownerId] of Array.from(room.vehicleOwners.entries())) {
         if (ownerId === mapping.playerId) {
           room.vehicleOwners.delete(vId);
@@ -147,6 +184,11 @@ async function startServer() {
           room.aircraftOwners.delete(aId);
           broadcastToRoom(room, { type: 'aircraft_owner_changed', aircraftId: aId, ownerId: null });
         }
+      }
+      if (room.toothlessOwner === mapping.playerId) {
+        room.toothlessOwner = null;
+        room.toothlessState = null;
+        broadcastToRoom(room, { type: 'toothless_owner_changed', ownerId: null });
       }
 
       room.players.delete(mapping.playerId);
@@ -177,6 +219,7 @@ async function startServer() {
     ws.on('error', cleanupClient);
 
     ws.on('message', (raw: string) => {
+      (ws as any).isAlive = true;
       let data: any;
       try {
         data = JSON.parse(raw.toString());
@@ -184,8 +227,8 @@ async function startServer() {
         return;
       }
 
-      if (data.type === 'ping') {
-        safeSend(ws, { type: 'pong', time: data.time });
+      if (data.type === 'ping' || data.type === 'pong') {
+        safeSend(ws, { type: 'pong', time: data.time || Date.now() });
         return;
       }
 
@@ -213,6 +256,8 @@ async function startServer() {
           vehicleId: null,
           inAircraft: false,
           aircraftId: null,
+          onToothless: false,
+          toothlessMounting: false,
           hp: 100,
           lastPing: Date.now(),
         };
@@ -224,6 +269,8 @@ async function startServer() {
           players: new Map([[playerId, newPlayer]]),
           vehicleOwners: new Map(),
           aircraftOwners: new Map(),
+          toothlessOwner: null,
+          toothlessState: null,
           knockedProps: new Map(),
         };
 
@@ -276,6 +323,8 @@ async function startServer() {
           vehicleId: null,
           inAircraft: false,
           aircraftId: null,
+          onToothless: false,
+          toothlessMounting: false,
           hp: 100,
           lastPing: Date.now(),
         };
@@ -296,6 +345,8 @@ async function startServer() {
           vehicleId: p.vehicleId,
           inAircraft: p.inAircraft,
           aircraftId: p.aircraftId,
+          onToothless: p.onToothless,
+          toothlessMounting: p.toothlessMounting,
           hp: p.hp,
         }));
 
@@ -313,6 +364,8 @@ async function startServer() {
           players: existingPlayers,
           vehicleOwners: Object.fromEntries(room.vehicleOwners),
           aircraftOwners: Object.fromEntries(room.aircraftOwners),
+          toothlessOwner: room.toothlessOwner,
+          toothlessState: room.toothlessState,
           knockedProps: Array.from(room.knockedProps.values()),
         });
 
@@ -363,6 +416,8 @@ async function startServer() {
           player.vehicleId = data.vehicleId || null;
           player.inAircraft = !!data.inAircraft;
           player.aircraftId = data.aircraftId || null;
+          player.onToothless = !!data.onToothless;
+          player.toothlessMounting = !!data.toothlessMounting;
           player.hp = typeof data.hp === 'number' ? data.hp : player.hp;
           player.characterId = data.characterId || player.characterId;
 
@@ -380,21 +435,28 @@ async function startServer() {
             vehicleId: player.vehicleId,
             inAircraft: player.inAircraft,
             aircraftId: player.aircraftId,
+            onToothless: player.onToothless,
+            toothlessMounting: player.toothlessMounting,
+            toothlessState: data.toothlessState || null,
             hp: player.hp,
             characterId: player.characterId,
             name: player.name,
             timestamp: data.timestamp || Date.now(),
           };
 
+          if (data.toothlessState) {
+            room.toothlessState = data.toothlessState;
+            room.toothlessOwner = mapping.playerId;
+          }
+
           const payload = JSON.stringify(broadcastData);
           for (const [targetId, targetPlayer] of room.players) {
             if (targetId === mapping.playerId) continue;
             if (targetPlayer.ws.readyState !== WebSocket.OPEN) continue;
 
-            // Distance-based network throttling
+            // Distance-based network throttling (do not throttle if flying or in vehicle)
             const dist = distance3D(player.x, player.y, player.z, targetPlayer.x, targetPlayer.y, targetPlayer.z);
-            if (dist > 250) {
-              // Only forward every ~3rd packet when very far away
+            if (dist > 350 && !player.onToothless && !player.inAircraft) {
               if (Math.random() > 0.35) continue;
             }
             try {
@@ -403,6 +465,69 @@ async function startServer() {
               // Ignore send error
             }
           }
+        }
+        return;
+      }
+
+      if (data.type === 'toothless_claim') {
+        if (room.toothlessOwner && room.toothlessOwner !== mapping.playerId) {
+          safeSend(ws, {
+            type: 'toothless_claim_result',
+            success: false,
+            ownerId: room.toothlessOwner,
+            message: 'Toothless is currently being flown by another player.',
+          });
+        } else {
+          room.toothlessOwner = mapping.playerId;
+          safeSend(ws, {
+            type: 'toothless_claim_result',
+            success: true,
+            ownerId: mapping.playerId,
+          });
+          broadcastToRoom(room, {
+            type: 'toothless_owner_changed',
+            ownerId: mapping.playerId,
+          });
+        }
+        return;
+      }
+
+      if (data.type === 'toothless_release') {
+        if (room.toothlessOwner === mapping.playerId) {
+          room.toothlessOwner = null;
+          room.toothlessState = null;
+          broadcastToRoom(room, {
+            type: 'toothless_owner_changed',
+            ownerId: null,
+            landingPos: data.landingPos || null,
+          });
+        }
+        return;
+      }
+
+      if (data.type === 'toothless_state') {
+        if (!room.toothlessOwner || room.toothlessOwner === mapping.playerId) {
+          room.toothlessOwner = mapping.playerId;
+          room.toothlessState = data;
+          broadcastToRoom(
+            room,
+            {
+              type: 'toothless_state',
+              playerId: mapping.playerId,
+              x: data.x,
+              y: data.y,
+              z: data.z,
+              yaw: data.yaw,
+              pitch: data.pitch || 0,
+              roll: data.roll || 0,
+              speed: data.speed || 0,
+              verticalSpeed: data.verticalSpeed || 0,
+              wingFlap: data.wingFlap || 0,
+              airborne: !!data.airborne,
+              timestamp: data.timestamp || Date.now(),
+            },
+            mapping.playerId
+          );
         }
         return;
       }

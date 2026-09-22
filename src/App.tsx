@@ -591,11 +591,21 @@ function applyPlayerGrabPose(
   }
 }
 
-function isInCone(origin: THREE.Vector3, forward: THREE.Vector3, target: THREE.Vector3, range: number, minDot = 0.45) {
-  const delta = target.clone().sub(origin).setY(0);
-  const distance = delta.length();
-  if (distance <= 0.001 || distance > range) return false;
-  return delta.normalize().dot(forward.clone().setY(0).normalize()) >= minDot;
+function isInCone(
+  origin: THREE.Vector3,
+  forward: THREE.Vector3,
+  target: THREE.Vector3,
+  range: number,
+  minDot = 0.45,
+  maxVerticalDelta = 3.5
+) {
+  const delta3D = target.clone().sub(origin);
+  if (Math.abs(delta3D.y) > maxVerticalDelta) return false;
+  const dist3D = delta3D.length();
+  if (dist3D <= 0.001 || dist3D > range) return false;
+  const delta2D = delta3D.clone().setY(0);
+  if (delta2D.length() <= 0.001) return true;
+  return delta2D.normalize().dot(forward.clone().setY(0).normalize()) >= minDot;
 }
 
 export default function App() {
@@ -4693,7 +4703,7 @@ export default function App() {
       if (!e || e.specialDamageCooldown > 0) return;
       const boss = e.ashBattle.state.currentBoss;
       if (e.ashBattle.state.isActive && boss?.mesh) {
-        if (isInCone(e.playerMovement.position, forward, boss.mesh.position, range, minDot)) {
+        if (isInCone(e.playerMovement.position, forward, boss.mesh.position, range, minDot, 7.5)) {
           e.ashBattle.damageBoss(amount, 'special', e.playerMovement.position, Math.max(9, amount * 0.45));
           e.cameraShake = Math.max(e.cameraShake, 0.18);
           e.specialDamageCooldown = 0.42;
@@ -4701,7 +4711,7 @@ export default function App() {
         return;
       }
       const ash = springfield.simpsonsHouse.ashMesh;
-      if (isInCone(e.playerMovement.position, forward, ash.position, range, minDot)) {
+      if (isInCone(e.playerMovement.position, forward, ash.position, range, minDot, 7.5)) {
         hitAshFreeRoam(e.playerMovement.position, Math.max(8, amount * 0.75), 6.5);
         e.cameraShake = Math.max(e.cameraShake, 0.14);
         e.specialDamageCooldown = 0.42;
@@ -4815,7 +4825,7 @@ export default function App() {
       if (
         e.ashBattle.state.isActive &&
         boss?.mesh &&
-        isInCone(pPos, forward, boss.mesh.position, profile.range + 0.4, -0.05)
+        isInCone(pPos, forward, boss.mesh.position, profile.range + 0.4, -0.05, 2.4)
       ) {
         e.ashBattle.damageBoss(
           profile.bossDamage,

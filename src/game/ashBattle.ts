@@ -55,6 +55,10 @@ export class AshBattleManager {
     dialogue: string;
     modelFactory: () => THREE.Group;
     weight: number;
+    maxVerticalReach: number;
+    minVerticalReach: number;
+    attackRange3D: number;
+    isRanged: boolean;
   }[] = [
     {
       id: 'homer',
@@ -65,6 +69,10 @@ export class AshBattleManager {
       dialogue: "D'OH! Why you little Pokémon!",
       modelFactory: createHomerNPC,
       weight: 1.8,
+      maxVerticalReach: 1.9,
+      minVerticalReach: -1.2,
+      attackRange3D: 3.4,
+      isRanged: false,
     },
     {
       id: 'marge',
@@ -75,6 +83,10 @@ export class AshBattleManager {
       dialogue: 'Mmm-mmph! Put that thunderbolt away this instant!',
       modelFactory: createMargeNPC,
       weight: 1.1,
+      maxVerticalReach: 2.6,
+      minVerticalReach: -1.2,
+      attackRange3D: 3.2,
+      isRanged: false,
     },
     {
       id: 'bart',
@@ -85,6 +97,10 @@ export class AshBattleManager {
       dialogue: 'Eat my shorts, pocket monster!',
       modelFactory: createBartNPC,
       weight: 0.75,
+      maxVerticalReach: 2.2,
+      minVerticalReach: -1.2,
+      attackRange3D: 3.8,
+      isRanged: false,
     },
     {
       id: 'lisa',
@@ -95,6 +111,10 @@ export class AshBattleManager {
       dialogue: "According to vegetarian ethics, you shouldn't fight!",
       modelFactory: createLisaNPC,
       weight: 0.7,
+      maxVerticalReach: 3.8,
+      minVerticalReach: -1.8,
+      attackRange3D: 6.5,
+      isRanged: true,
     },
     {
       id: 'maggie',
@@ -105,6 +125,10 @@ export class AshBattleManager {
       dialogue: '*Suck suck suck* (somehow threatening)',
       modelFactory: createMaggieNPC,
       weight: 0.35,
+      maxVerticalReach: 4.2,
+      minVerticalReach: -1.8,
+      attackRange3D: 6.0,
+      isRanged: true,
     },
     {
       id: 'moe',
@@ -115,6 +139,10 @@ export class AshBattleManager {
       dialogue: "Alright pal, you're 86'd from Moe's Tavern!",
       modelFactory: createMoeNPC,
       weight: 1.25,
+      maxVerticalReach: 2.4,
+      minVerticalReach: -1.2,
+      attackRange3D: 3.2,
+      isRanged: false,
     },
     {
       id: 'apu',
@@ -125,6 +153,10 @@ export class AshBattleManager {
       dialogue: 'Thank you, come again and taste my wrath!',
       modelFactory: createApuNPC,
       weight: 0.95,
+      maxVerticalReach: 3.5,
+      minVerticalReach: -1.8,
+      attackRange3D: 5.2,
+      isRanged: true,
     },
   ];
 
@@ -323,10 +355,21 @@ export class AshBattleManager {
       return;
     }
 
+    const deltaY = playerPos.y - mesh.position.y;
+    const dist3D = playerPos.distanceTo(mesh.position);
     const toPlayer = playerPos.clone().sub(mesh.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
     const direction = dist > 0.001 ? toPlayer.clone().normalize() : new THREE.Vector3(0, 0, 1);
+
+    const rosterEntry = this.bossRoster[this.state.currentBossIndex];
+    const maxVertReach = rosterEntry?.maxVerticalReach ?? 2.2;
+    const minVertReach = rosterEntry?.minVerticalReach ?? -1.4;
+    const attackRange3D = rosterEntry?.attackRange3D ?? 3.4;
+    const isRanged = rosterEntry?.isRanged ?? false;
+
+    const isPlayerOutOfVerticalReach = deltaY > maxVertReach || deltaY < minVertReach;
+    const isPlayerIn3DAttackRange = dist3D <= attackRange3D && !isPlayerOutOfVerticalReach;
 
     // Aggressive boss pursuit. They now sprint at the player instead of slowly
     // shuffling toward a fixed point. Close-range fighters deliberately lunge,
@@ -343,9 +386,18 @@ export class AshBattleManager {
       mesh.position.addScaledVector(direction, boss.speed * sprintMultiplier * dt);
       mesh.rotation.y = Math.atan2(direction.x, direction.z);
       mesh.position.y = 0.12 + Math.abs(Math.sin(performance.now() * 0.012)) * (boss.id === 'homer' ? 0.10 : 0.18);
-    } else if (dist < preferredRange * 0.55 && ['lisa','maggie','apu'].includes(boss.id)) {
+    } else if (dist < preferredRange * 0.55 && isRanged && !isPlayerOutOfVerticalReach) {
       // Ranged fighters back-step rather than standing motionless inside the player.
       mesh.position.addScaledVector(direction, -boss.speed * 0.45 * dt);
+      mesh.rotation.y = Math.atan2(direction.x, direction.z);
+    } else {
+      mesh.rotation.y = Math.atan2(direction.x, direction.z);
+    }
+
+    // If the player is airborne high above, ground bosses tilt/look up towards the player
+    if (deltaY > 1.2 && (mesh.userData.attackAnimTimer ?? 0) <= 0) {
+      const lookUpAngle = THREE.MathUtils.clamp((deltaY - 1.2) * 0.08, 0, 0.45);
+      mesh.rotation.x = THREE.MathUtils.lerp(mesh.rotation.x, -lookUpAngle, Math.min(1, dt * 6));
     }
 
     // A generous arena leash keeps the brawl around the Simpsons property without
@@ -360,47 +412,49 @@ export class AshBattleManager {
     boss.attackCooldown -= dt;
     mesh.userData.attackAnimTimer = Math.max(0, (mesh.userData.attackAnimTimer ?? 0) - dt);
 
-    const attackRange =
-      boss.id === 'bart' ? 3.9 :
-      boss.id === 'lisa' ? 7.0 :
-      boss.id === 'maggie' ? 6.4 :
-      boss.id === 'apu' ? 5.5 :
-      boss.id === 'homer' ? 3.4 : 3.1;
+    if (boss.attackCooldown <= 0) {
+      if (isPlayerIn3DAttackRange) {
+        const damageByBoss: Record<string, number> = {
+          homer: 14, marge: 12, bart: 10, lisa: 9, maggie: 8, moe: 15, apu: 11,
+        };
+        const damage = damageByBoss[boss.id] ?? 10;
+        boss.attackCooldown = boss.id === 'bart' ? 0.62 : boss.id === 'maggie' ? 0.78 : boss.id === 'homer' ? 0.92 : 0.82;
+        mesh.userData.attackAnimTimer = 0.38;
+        this.state.battleLog = `${boss.name} used ${boss.specialMove}! -${damage} HP`;
+        playSoundEffect('kick');
 
-    if (boss.attackCooldown <= 0 && dist < attackRange) {
-      const damageByBoss: Record<string, number> = {
-        homer: 14, marge: 12, bart: 10, lisa: 9, maggie: 8, moe: 15, apu: 11,
-      };
-      const damage = damageByBoss[boss.id] ?? 10;
-      boss.attackCooldown = boss.id === 'bart' ? 0.62 : boss.id === 'maggie' ? 0.78 : boss.id === 'homer' ? 0.92 : 0.82;
-      mesh.userData.attackAnimTimer = 0.38;
-      this.state.battleLog = `${boss.name} used ${boss.specialMove}! -${damage} HP`;
-      playSoundEffect('kick');
+        if (boss.id === 'homer') {
+          mesh.scale.set(1.38, 0.78, 1.38);
+          mesh.position.addScaledVector(direction, 1.2);
+        } else if (boss.id === 'marge') {
+          mesh.rotation.y += Math.PI * 1.7;
+          mesh.scale.set(1.0, 1.18, 1.0);
+        } else if (boss.id === 'bart') {
+          mesh.position.addScaledVector(direction, 1.5);
+          mesh.rotation.z = -0.48;
+        } else if (boss.id === 'lisa') {
+          mesh.rotation.z = 0.35;
+          mesh.scale.set(1.12, 1.12, 1.12);
+        } else if (boss.id === 'maggie') {
+          mesh.position.y += 0.75;
+          mesh.scale.set(1.35, 1.35, 1.35);
+        } else if (boss.id === 'moe') {
+          mesh.rotation.x = -0.55;
+          mesh.scale.set(1.18, 1.0, 1.18);
+        } else if (boss.id === 'apu') {
+          mesh.rotation.z = -0.34;
+          mesh.position.addScaledVector(direction, 1.0);
+        }
 
-      if (boss.id === 'homer') {
-        mesh.scale.set(1.38, 0.78, 1.38);
-        mesh.position.addScaledVector(direction, 2.0);
-      } else if (boss.id === 'marge') {
-        mesh.rotation.y += Math.PI * 1.7;
-        mesh.scale.set(1.0, 1.18, 1.0);
-      } else if (boss.id === 'bart') {
-        mesh.position.addScaledVector(direction, 2.25);
-        mesh.rotation.z = -0.48;
-      } else if (boss.id === 'lisa') {
-        mesh.rotation.z = 0.35;
-        mesh.scale.set(1.12, 1.12, 1.12);
-      } else if (boss.id === 'maggie') {
-        mesh.position.y += 0.75;
-        mesh.scale.set(1.35, 1.35, 1.35);
-      } else if (boss.id === 'moe') {
-        mesh.rotation.x = -0.55;
-        mesh.scale.set(1.18, 1.0, 1.18);
-      } else if (boss.id === 'apu') {
-        mesh.rotation.z = -0.34;
-        mesh.position.addScaledVector(direction, 1.15);
+        this.onPlayerHitCallback?.(damage, boss);
+      } else if (deltaY > maxVertReach && dist < 4.0) {
+        // Player is flying safely above the team's reach: attack cannot hit or damage player
+        boss.attackCooldown = 0.55;
+        mesh.userData.attackAnimTimer = 0.22;
+        if (Math.random() < 0.12) {
+          this.state.battleLog = `${boss.name} cannot reach you while you are flying above!`;
+        }
       }
-
-      this.onPlayerHitCallback?.(damage, boss);
     }
 
     mesh.scale.lerp(this.tempScale, Math.min(1, dt * 7));

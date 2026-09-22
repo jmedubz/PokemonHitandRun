@@ -4449,7 +4449,7 @@ export class NPCManager {
               npc.mesh.rotation.set(0.08 * side, npc.mesh.rotation.y, side * Math.PI / 2);
               const safeLandingPos = this.findRecoveryPosition(npc, ground);
               npc.mesh.position.copy(safeLandingPos);
-              npc.mesh.position.y = Math.max(ground, safeLandingPos.y) + 0.16;
+              npc.mesh.position.y = safeLandingPos.y + 0.16;
             } else {
               // Ordinary impacts also get a readable get-up. Do not snap from a
               // ridiculous ragdoll directly into a walking pose on the landing frame.
@@ -4463,7 +4463,7 @@ export class NPCManager {
 
       if (npc.state === 'knocked_out') {
         const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
-        npc.mesh.position.y = Math.max(ground, npc.mesh.position.y) + 0.16;
+        npc.mesh.position.y = ground + 0.16;
         if (this.recoverPenetration && !this.canOccupy(npc.mesh.position, 0.40, 0.75)) {
           const rec = this.recoverPenetration(npc.mesh.position, 0.40, 0.75);
           npc.mesh.position.x = rec.x;
@@ -4751,7 +4751,7 @@ export class NPCManager {
           this.tempNext.x = THREE.MathUtils.clamp(this.tempNext.x, bounds.minX + 0.15, bounds.maxX - 0.15);
           this.tempNext.z = THREE.MathUtils.clamp(this.tempNext.z, bounds.minZ + 0.15, bounds.maxZ - 0.15);
         }
-        const ground = this.groundHeight(this.tempNext.x, this.tempNext.z, npc.mesh.position.y);
+        const ground = this.groundHeight(this.tempNext.x, this.tempNext.z, npc.mesh.position.y, 120, 0.12);
         this.tempNext.y = mode === 'hover' ? ground + 1.0 + Math.sin(now * 3) * 0.18 : ground;
 
         const candidateOnRoad = mode === 'ground' && this.isRoadSurface(this.tempNext.x, this.tempNext.z, 0.12);
@@ -4867,7 +4867,7 @@ export class NPCManager {
           this.launchNPC(npc, npc.walkDirection.clone(), 7, 5.5);
         }
       } else {
-        const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y);
+        const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
         npc.mesh.position.y = mode === 'hover' ? ground + 1.0 + Math.sin(now * 2.5) * 0.16 : ground;
       }
 

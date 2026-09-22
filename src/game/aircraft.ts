@@ -22,6 +22,7 @@ export type AircraftImpactRegion =
   | 'left_engine'
   | 'right_engine'
   | 'tail'
+  | 'gear'
   | 'unknown';
 
 export type AircraftImpactInfo = {
@@ -36,6 +37,197 @@ export type AircraftImpactInfo = {
   region: AircraftImpactRegion;
   lodged: boolean;
 };
+
+export interface AircraftCollisionProbe {
+  /** Local offset in aircraft model coordinate space (X: right, Y: up, Z: forward) */
+  local: THREE.Vector3;
+  /** Horizontal collision radius (metres) */
+  radius: number;
+  /** Vertical collision thickness/height (metres) */
+  height: number;
+  /** Sub-structure region for damage and telemetry attribution */
+  region: AircraftImpactRegion;
+}
+
+/**
+ * Generates tightened 3D collision probes exactly matching the physical geometry
+ * of the 3D aircraft model (fuselage cylinder, elevated wings, engine nacelles,
+ * tail fins, and landing gear). This prevents wings from colliding with low-profile
+ * obstacles like fences when the wing is physically above them.
+ */
+export function getAircraftCollisionProbes(aircraft: {
+  kind?: string;
+  wingspan: number;
+  length: number;
+  collisionRadius?: number;
+  gearHeight?: number;
+}): AircraftCollisionProbe[] {
+  const kind = aircraft.kind;
+  const wingspan = aircraft.wingspan;
+  const length = aircraft.length;
+
+  const specs = kind === 'trainer'
+    ? { length, wingspan, radius: 0.72, chord: 2.4, highWing: true, wingY: 2.60 + 0.72 * 0.75, fuselageY: 2.60, wingThick: 0.36 }
+    : kind === 'commuter'
+    ? { length, wingspan, radius: 1.25, chord: 4.1, highWing: true, wingY: 2.89 + 1.25 * 0.75, fuselageY: 2.89, wingThick: 0.44 }
+    : kind === 'zacks_plane'
+    ? { length, wingspan, radius: 1.0, chord: 3.2, highWing: true, wingY: 3.50, fuselageY: 2.75, wingThick: 0.38, lowerWingY: 1.90 }
+    : { length, wingspan, radius: 2.05, chord: 7.0, highWing: false, wingY: 3.33 - 2.05 * 0.12, fuselageY: 3.33, wingThick: 0.58 };
+
+  const probes: AircraftCollisionProbe[] = [];
+  const halfLength = length * 0.48;
+  const fRadius = specs.radius * 0.92;
+  const fHeight = specs.radius * 1.84;
+
+  // Fuselage centerline probes
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY, halfLength * 0.95),
+    radius: fRadius * 0.88,
+    height: fHeight * 0.88,
+    region: 'nose',
+  });
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY + specs.radius * 0.25, halfLength * 0.65),
+    radius: fRadius,
+    height: fHeight,
+    region: 'nose',
+  });
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY, 0),
+    radius: fRadius * 1.02,
+    height: fHeight * 1.02,
+    region: 'fuselage',
+  });
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY, -halfLength * 0.52),
+    radius: fRadius * 0.94,
+    height: fHeight * 0.94,
+    region: 'fuselage',
+  });
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY, -halfLength * 0.90),
+    radius: fRadius * 0.82,
+    height: fHeight * 0.82,
+    region: 'tail',
+  });
+
+  // Vertical fin
+  probes.push({
+    local: new THREE.Vector3(0, specs.fuselageY + specs.radius * 1.4, -halfLength * 0.88),
+    radius: 0.30,
+    height: specs.radius * 2.2,
+    region: 'tail',
+  });
+
+  // Horizontal stabilizers
+  const hTailSpan = wingspan * 0.34;
+  probes.push({
+    local: new THREE.Vector3(-hTailSpan * 0.42, specs.fuselageY + 0.3, -halfLength * 0.88),
+    radius: 0.36,
+    height: 0.32,
+    region: 'tail',
+  });
+  probes.push({
+    local: new THREE.Vector3(hTailSpan * 0.42, specs.fuselageY + 0.3, -halfLength * 0.88),
+    radius: 0.36,
+    height: 0.32,
+    region: 'tail',
+  });
+
+  // Main wings: multiple stations along each wing (left & right)
+  const halfWing = wingspan * 0.50;
+  const wingZ = kind === 'jetliner' ? 0.0 : -0.4;
+  const wingStations = [0.26, 0.48, 0.70, 0.92, 0.99];
+
+  for (const frac of wingStations) {
+    const spanDist = halfWing * frac;
+    const taper = THREE.MathUtils.lerp(1.0, 0.45, frac);
+    const stationChord = specs.chord * taper;
+    const probeRadius = Math.max(0.35, stationChord * 0.28);
+    const probeHeight = specs.wingThick * taper + 0.08;
+
+    // Left wing probe
+    probes.push({
+      local: new THREE.Vector3(-spanDist, specs.wingY, wingZ - (kind === 'jetliner' ? frac * 1.8 : 0)),
+      radius: probeRadius,
+      height: probeHeight,
+      region: 'left_wing',
+    });
+    // Right wing probe
+    probes.push({
+      local: new THREE.Vector3(spanDist, specs.wingY, wingZ - (kind === 'jetliner' ? frac * 1.8 : 0)),
+      radius: probeRadius,
+      height: probeHeight,
+      region: 'right_wing',
+    });
+  }
+
+  // Zack's biplane lower wing
+  if (kind === 'zacks_plane' && 'lowerWingY' in specs) {
+    const lowerHalfWing = wingspan * 0.93 * 0.50;
+    for (const frac of [0.30, 0.60, 0.92]) {
+      const spanDist = lowerHalfWing * frac;
+      probes.push({
+        local: new THREE.Vector3(-spanDist, specs.lowerWingY, -0.2),
+        radius: 0.42,
+        height: 0.36,
+        region: 'left_wing',
+      });
+      probes.push({
+        local: new THREE.Vector3(spanDist, specs.lowerWingY, -0.2),
+        radius: 0.42,
+        height: 0.36,
+        region: 'right_wing',
+      });
+    }
+  }
+
+  // Twin engines (commuter & jetliner)
+  if (kind === 'commuter' || kind === 'jetliner') {
+    const engineX = wingspan * 0.28;
+    const engineY = specs.wingY - specs.radius * 0.72;
+    const engineZ = wingZ + 0.25;
+    const engineRadius = specs.radius * 0.48;
+    const engineHeight = specs.radius * 0.96;
+    probes.push({
+      local: new THREE.Vector3(-engineX, engineY, engineZ),
+      radius: engineRadius,
+      height: engineHeight,
+      region: 'left_engine',
+    });
+    probes.push({
+      local: new THREE.Vector3(engineX, engineY, engineZ),
+      radius: engineRadius,
+      height: engineHeight,
+      region: 'right_engine',
+    });
+  }
+
+  // Landing gear (wheels/struts)
+  const gearY = 0.62;
+  const mainGearZ = kind === 'jetliner' ? -1.4 : -0.7;
+  const gearXs = kind === 'jetliner' ? [-4.1, 4.1] : [-wingspan * 0.20, wingspan * 0.20];
+  probes.push({
+    local: new THREE.Vector3(0, gearY, length * 0.32),
+    radius: 0.32,
+    height: 0.65,
+    region: 'nose',
+  });
+  probes.push({
+    local: new THREE.Vector3(gearXs[0], gearY, mainGearZ),
+    radius: 0.36,
+    height: 0.65,
+    region: 'fuselage',
+  });
+  probes.push({
+    local: new THREE.Vector3(gearXs[1], gearY, mainGearZ),
+    radius: 0.36,
+    height: 0.65,
+    region: 'fuselage',
+  });
+
+  return probes;
+}
 
 export type AircraftUpdateResult = {
   crashedThisFrame: boolean;
@@ -81,13 +273,17 @@ export class AircraftController {
   private readonly collision: CollisionSystem;
   private readonly worldInteractions?: WorldInteractionManager;
   private readonly ignoreKickableCollider = (collider: WallBox) => collider.collisionRole === 'interactive';
+  private readonly probes: AircraftCollisionProbe[];
   private velocity = new THREE.Vector3();
   private forward = new THREE.Vector3();
   private right = new THREE.Vector3();
+  private up = new THREE.Vector3();
   private next = new THREE.Vector3();
   private euler = new THREE.Euler(0,0,0,'YXZ');
   private quat = new THREE.Quaternion();
   private sample = new THREE.Vector3();
+  private probeWorldRotated = new THREE.Vector3();
+  private probeWorldCenter = new THREE.Vector3();
   private sweepSample = new THREE.Vector3();
   private sweepPosition = new THREE.Vector3();
   private crashVelocity = new THREE.Vector3();
@@ -123,6 +319,7 @@ export class AircraftController {
     this.collision = collision;
     this.allAircraft = allAircraft;
     this.worldInteractions = worldInteractions;
+    this.probes = getAircraftCollisionProbes(aircraft);
     const persistedDamage = aircraft.mesh.userData.aircraftRegionalDamage as AircraftRegionalDamage | undefined;
     this.regionalDamage = persistedDamage ?? freshRegionalDamage();
     aircraft.mesh.userData.aircraftRegionalDamage = this.regionalDamage;
@@ -149,6 +346,7 @@ export class AircraftController {
     this.quat.setFromEuler(this.euler);
     this.forward.set(0,0,1).applyQuaternion(this.quat).normalize();
     this.right.set(1,0,0).applyQuaternion(this.quat).normalize();
+    this.up.set(0,1,0).applyQuaternion(this.quat).normalize();
   }
 
   private probeOverlapsCollider(position: THREE.Vector3, radius: number, height: number, collider: WallBox) {
@@ -197,44 +395,30 @@ export class AircraftController {
     contactPoint: THREE.Vector3;
     contactSide: number;
     contactFore: number;
+    contactRegion: AircraftImpactRegion;
     structure: WallBox | null;
     contactSurface: 'structure' | 'aircraft' | null;
   } {
     const a = this.aircraft;
     this.orientVectors();
-    const halfLength = a.length * 0.46;
-    const halfWing = a.wingspan * 0.46;
-    const samples: Array<readonly [number, number]> = [
-      [0, 0],
-      [0, halfLength], [0, halfLength * 0.68],
-      [0, -halfLength], [0, -halfLength * 0.68],
-      [halfWing, 0], [-halfWing, 0],
-      [halfWing * 0.72, a.length * 0.08], [-halfWing * 0.72, a.length * 0.08],
-      [halfWing * 0.62, -a.length * 0.12], [-halfWing * 0.62, -a.length * 0.12],
-    ];
-    // Twin-engine aircraft get dedicated nacelle probes so a genuine engine strike
-    // can be distinguished from a generic wing strike. Single-engine trainers and
-    // Zack's biplane keep their powerplant in the nose/fuselage damage region.
-    if (a.kind === 'commuter' || a.kind === 'jetliner') {
-      samples.splice(5, 0,
-        [a.wingspan * 0.28, a.length * 0.015],
-        [-a.wingspan * 0.28, a.length * 0.015],
-      );
-    }
-    const probeRadius = Math.max(0.72, a.collisionRadius * 0.54);
-    const bodyHeight = a.kind === 'jetliner' ? 7.8 : a.kind === 'commuter' ? 5.7 : a.kind === 'zacks_plane' ? 5.3 : 4.5;
-    const collisionBaseOffset = Math.max(0, -a.gearHeight - 0.03);
 
-    for (const [side, fore] of samples) {
-      this.sample.copy(pos).addScaledVector(this.right, side).addScaledVector(this.forward, fore);
-      this.sample.y += collisionBaseOffset;
-      if (!this.collision.canFlyOccupy(this.sample, probeRadius, bodyHeight, this.ignoreKickableCollider)) {
+    for (const probe of this.probes) {
+      this.probeWorldRotated.copy(probe.local).applyQuaternion(this.quat);
+      this.probeWorldCenter.copy(pos).add(this.probeWorldRotated);
+      // canFlyOccupy checks cylinder base position (bottom) and vertical height:
+      this.sample.set(
+        this.probeWorldCenter.x,
+        this.probeWorldCenter.y - probe.height * 0.5,
+        this.probeWorldCenter.z,
+      );
+      if (!this.collision.canFlyOccupy(this.sample, probe.radius, probe.height, this.ignoreKickableCollider)) {
         return {
           clear: false,
-          contactPoint: this.sample.clone(),
-          contactSide: side,
-          contactFore: fore,
-          structure: this.findBlockingStructure(this.sample, probeRadius, bodyHeight),
+          contactPoint: this.probeWorldCenter.clone(),
+          contactSide: probe.local.x,
+          contactFore: probe.local.z,
+          contactRegion: probe.region,
+          structure: this.findBlockingStructure(this.sample, probe.radius, probe.height),
           contactSurface: 'structure',
         };
       }
@@ -251,10 +435,26 @@ export class AircraftController {
       const limit = ownRadius + otherRadius;
       if (dx * dx + dz * dz < limit * limit) {
         this.sample.set((pos.x + other.position.x) * 0.5, (pos.y + other.position.y) * 0.5, (pos.z + other.position.z) * 0.5);
-        return { clear: false, contactPoint: this.sample.clone(), contactSide: 0, contactFore: 0, structure: null, contactSurface: 'aircraft' };
+        return {
+          clear: false,
+          contactPoint: this.sample.clone(),
+          contactSide: 0,
+          contactFore: 0,
+          contactRegion: 'fuselage',
+          structure: null,
+          contactSurface: 'aircraft',
+        };
       }
     }
-    return { clear: true, contactPoint: pos.clone(), contactSide: 0, contactFore: 0, structure: null, contactSurface: null };
+    return {
+      clear: true,
+      contactPoint: pos.clone(),
+      contactSide: 0,
+      contactFore: 0,
+      contactRegion: 'unknown',
+      structure: null,
+      contactSurface: null,
+    };
   }
 
   private resolveSoftContacts(
@@ -310,12 +510,12 @@ export class AircraftController {
       const probe = this.probeAircraftAt(end);
       return {
         position: start.clone(), collided: !probe.clear, contactPoint: probe.contactPoint,
-        contactSide: probe.contactSide, contactFore: probe.contactFore, structure: probe.structure,
+        contactSide: probe.contactSide, contactFore: probe.contactFore, contactRegion: probe.contactRegion, structure: probe.structure,
         contactSurface: probe.contactSurface, travelRatio: probe.clear ? 1 : 0,
       };
     }
 
-    const maxStepDistance = THREE.MathUtils.clamp(this.aircraft.collisionRadius * 0.42, 0.38, 0.90);
+    const maxStepDistance = THREE.MathUtils.clamp(this.aircraft.collisionRadius * 0.35, 0.35, 0.85);
     const steps = Math.max(1, Math.ceil(distance / maxStepDistance));
     const lastSafe = start.clone();
     for (let i = 1; i <= steps; i++) {
@@ -329,6 +529,7 @@ export class AircraftController {
           contactPoint: probe.contactPoint,
           contactSide: probe.contactSide,
           contactFore: probe.contactFore,
+          contactRegion: probe.contactRegion,
           structure: probe.structure,
           contactSurface: probe.contactSurface,
           travelRatio: (i - 1) / steps,
@@ -336,17 +537,26 @@ export class AircraftController {
       }
       lastSafe.copy(this.sweepPosition);
     }
-    return { position: end.clone(), collided: false, contactPoint: end.clone(), contactSide: 0, contactFore: 0, structure: null, contactSurface: null, travelRatio: 1 };
+    return {
+      position: end.clone(),
+      collided: false,
+      contactPoint: end.clone(),
+      contactSide: 0,
+      contactFore: 0,
+      contactRegion: 'unknown' as AircraftImpactRegion,
+      structure: null,
+      contactSurface: null,
+      travelRatio: 1,
+    };
   }
 
   private estimateCollisionNormal(contactPoint: THREE.Vector3, incomingVelocity: THREE.Vector3) {
-    const a = this.aircraft;
     const incomingDirection = incomingVelocity.lengthSq() > 1e-6
       ? incomingVelocity.clone().normalize()
       : new THREE.Vector3(0, 0, 1);
-    const probeRadius = Math.max(0.72, a.collisionRadius * 0.54);
-    const bodyHeight = a.kind === 'jetliner' ? 7.8 : a.kind === 'commuter' ? 5.7 : a.kind === 'zacks_plane' ? 5.3 : 4.5;
-    const step = THREE.MathUtils.clamp(probeRadius * 0.72, 0.42, 1.8);
+    const probeRadius = 0.55;
+    const bodyHeight = 0.80;
+    const step = 0.75;
     const directions = [
       new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
       new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
@@ -357,6 +567,7 @@ export class AircraftController {
     let bestScore = -Infinity;
     for (const direction of directions) {
       this.sample.copy(contactPoint).addScaledVector(direction, step);
+      this.sample.y -= bodyHeight * 0.5;
       if (!this.collision.canFlyOccupy(this.sample, probeRadius, bodyHeight, this.ignoreKickableCollider)) continue;
       const score = -incomingDirection.dot(direction);
       if (score > bestScore) {
@@ -1051,10 +1262,12 @@ export class AircraftController {
       const normalImpactSpeed = Math.abs(impactVelocity.dot(impactNormal));
       const impactEnergy = 0.5 * a.mass * normalImpactSpeed * normalImpactSpeed;
       const severity = this.classifyImpact(normalImpactSpeed, impactEnergy);
-      const impactRegion = this.classifyImpactRegion(sweptMotion.contactSide, sweptMotion.contactFore);
+      const impactRegion = sweptMotion.contactRegion && sweptMotion.contactRegion !== 'unknown'
+        ? sweptMotion.contactRegion
+        : this.classifyImpactRegion(sweptMotion.contactSide, sweptMotion.contactFore);
       const surfaceContactPoint = sweptMotion.contactPoint.clone().addScaledVector(
         impactNormal,
-        -Math.max(0.72, a.collisionRadius * 0.54),
+        -0.28,
       );
       const impactInfo: AircraftImpactInfo = {
         point: surfaceContactPoint,

@@ -689,9 +689,9 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   // East and West connector roads linking directly to the Airport road network.
   // -------------------------------------------------------------------------
   // North Access Boulevard Causeway: from Z = -161 to Z = -260 (length: 99m)
-  const accessRoadNorth = new THREE.Mesh(new THREE.BoxGeometry(14, 0.16, 99), asphaltMat);
+  const accessRoadNorth = new THREE.Mesh(new THREE.BoxGeometry(14, 0.18, 99), asphaltMat);
   accessRoadNorth.name = 'arcade_access_boulevard_north';
-  accessRoadNorth.position.set(BUILDING_X, 0.08, -210.5);
+  accessRoadNorth.position.set(BUILDING_X, 0.09, -210.5);
   markWalkable(accessRoadNorth, 8);
   accessRoadNorth.userData.mapRoadSurface = true;
   accessRoadNorth.userData.permanentRoadGeometry = true;
@@ -701,13 +701,14 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
 
   // Smooth, wide approach apron with Northern Viaduct (Z = -161 to -178)
   // Generous 40m wide asphalt apron ensures seamless transition with no concrete obstruction
-  const junctionDeck = new THREE.Mesh(new THREE.BoxGeometry(40, 0.16, 17), asphaltMat);
+  const junctionDeck = new THREE.Mesh(new THREE.BoxGeometry(40, 0.18, 17), asphaltMat);
   junctionDeck.name = 'arcade_bridge_approach_apron';
-  junctionDeck.position.set(BUILDING_X, 0.08, -169.5);
+  junctionDeck.position.set(BUILDING_X, 0.09, -169.5);
   markWalkable(junctionDeck, 8);
   junctionDeck.userData.mapRoadSurface = true;
   junctionDeck.userData.permanentRoadGeometry = true;
   junctionDeck.userData.roadCriticalDetail = true;
+  junctionDeck.userData.walkablePriority = 8;
   root.add(junctionDeck);
 
   // Causeway concrete support piers in the river (Z = -190, -210, -230)
@@ -796,13 +797,13 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
 
   // -------------------------------------------------------------------------
   // WEST EXTENDED ROAD (Connecting Car Park to Airport West Approach Road)
-  // From X = -18 (Car Park West edge) to X = -168 (Airport West road), along Z = -273
+  // From X = -18 (Car Park West edge) to X = -170 (Airport West road), along Z = -273
   // -------------------------------------------------------------------------
-  const westRoadLen = 150;
-  const westRoadX = (-18 + -168) / 2; // -93
-  const roadWest = new THREE.Mesh(new THREE.BoxGeometry(westRoadLen, 0.16, 14), asphaltMat);
+  const westRoadLen = 152;
+  const westRoadX = (-18 + -170) / 2; // -94
+  const roadWest = new THREE.Mesh(new THREE.BoxGeometry(westRoadLen, 0.18, 14), asphaltMat);
   roadWest.name = 'arcade_extended_road_west';
-  roadWest.position.set(westRoadX, 0.08, -273);
+  roadWest.position.set(westRoadX, 0.09, -273);
   markWalkable(roadWest, 8);
   roadWest.userData.mapRoadSurface = true;
   roadWest.userData.permanentRoadGeometry = true;
@@ -813,45 +814,74 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   // West Road Dashed Lane Centerline
   for (let wx = -164; wx <= -22; wx += 7) {
     const dash = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.04, 0.24), createMaterial(0xffffff, 0.4, 0.1));
-    dash.position.set(wx, 0.17, -273);
+    dash.position.set(wx, 0.182, -273);
     dash.userData.roadCriticalDetail = true;
     root.add(dash);
   }
 
   // West Road Junction Connector Fillet with Airport Road (at X = -168, Z = -273)
-  const westJunction = new THREE.Mesh(new THREE.BoxGeometry(16, 0.16, 18), asphaltMat);
+  const westJunction = new THREE.Mesh(new THREE.BoxGeometry(22, 0.18, 20), asphaltMat);
   westJunction.name = 'arcade_west_airport_junction';
-  westJunction.position.set(-168, 0.08, -273);
+  westJunction.position.set(-168, 0.09, -273);
   markWalkable(westJunction, 8);
   westJunction.userData.mapRoadSurface = true;
   westJunction.userData.permanentRoadGeometry = true;
   westJunction.userData.roadCriticalDetail = true;
+  westJunction.userData.walkablePriority = 8;
   root.add(westJunction);
 
-  // Streetlamps along West Extended Road
+  // Kickable Streetlamps along West Extended Road
+  let arcadeLampCount = 0;
   for (let lx = -155; lx <= -35; lx += 30) {
     const lamp = new THREE.Group();
+    lamp.name = `arcade_lamp_west_${arcadeLampCount}`;
     lamp.position.set(lx, 0, -280.5);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.5, 8), metalFrameMat);
     pole.position.y = 3.25;
-    markSolid(pole, 0.05);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.4), metalFrameMat);
     arm.position.set(0.6, 6.4, 0);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), createMaterial(0xfffbeb, 0.1, 0.9));
     bulb.position.set(1.2, 6.2, 0);
     lamp.add(pole, arm, bulb);
     root.add(lamp);
+    destructibles.push({
+      id: `arcade_lamp_west_${arcadeLampCount++}`,
+      mesh: lamp,
+      type: 'lamp',
+      position: { x: lx, y: 0, z: -280.5 },
+      destroyed: false,
+    });
+  }
+
+  // Kickable Trees along West Extended Road verge
+  let arcadeTreeCount = 0;
+  for (let tx = -145; tx <= -35; tx += 28) {
+    const tree = new THREE.Group();
+    tree.name = `kickable_tree_arcade_west_${arcadeTreeCount}`;
+    tree.userData.kickableTree = true;
+    tree.userData.treePhysicsProfile = 'arcade_reusable';
+    tree.position.set(tx, 0, -265.5);
+    const visual = createStylizedCityTreeModel(1.05);
+    tree.add(visual);
+    root.add(tree);
+    destructibles.push({
+      id: `arcade_tree_west_${arcadeTreeCount++}`,
+      mesh: tree,
+      type: 'tree',
+      position: { x: tx, y: 0, z: -265.5 },
+      destroyed: false,
+    });
   }
 
   // -------------------------------------------------------------------------
   // EAST EXTENDED ROAD (Connecting Car Park to Airport East Approach Road)
-  // From X = +34 (Car Park East edge) to X = +273 (Airport East road), along Z = -273
+  // From X = +34 (Car Park East edge) to X = +278 (Airport East road), along Z = -273
   // -------------------------------------------------------------------------
-  const eastRoadLen = 239;
-  const eastRoadX = (34 + 273) / 2; // 153.5
-  const roadEast = new THREE.Mesh(new THREE.BoxGeometry(eastRoadLen, 0.16, 14), asphaltMat);
+  const eastRoadLen = 244;
+  const eastRoadX = (34 + 278) / 2; // 156
+  const roadEast = new THREE.Mesh(new THREE.BoxGeometry(eastRoadLen, 0.18, 14), asphaltMat);
   roadEast.name = 'arcade_extended_road_east';
-  roadEast.position.set(eastRoadX, 0.08, -273);
+  roadEast.position.set(eastRoadX, 0.09, -273);
   markWalkable(roadEast, 8);
   roadEast.userData.mapRoadSurface = true;
   roadEast.userData.permanentRoadGeometry = true;
@@ -860,52 +890,129 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   root.add(roadEast);
 
   // East Road Dashed Lane Centerline
-  for (let ex = 38; ex <= 269; ex += 7) {
+  for (let ex = 38; ex <= 270; ex += 7) {
     const dash = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.04, 0.24), createMaterial(0xffffff, 0.4, 0.1));
-    dash.position.set(ex, 0.17, -273);
+    dash.position.set(ex, 0.182, -273);
     dash.userData.roadCriticalDetail = true;
     root.add(dash);
   }
 
-  // East Road Junction Connector Fillet with Airport Road (at X = +273, Z = -273)
-  const eastJunction = new THREE.Mesh(new THREE.BoxGeometry(18, 0.16, 18), asphaltMat);
+  // East Road Junction Connector Fillet with Airport Road (at X = +274, Z = -273)
+  const eastJunction = new THREE.Mesh(new THREE.BoxGeometry(24, 0.18, 20), asphaltMat);
   eastJunction.name = 'arcade_east_airport_junction';
-  eastJunction.position.set(273, 0.08, -273);
+  eastJunction.position.set(274, 0.09, -273);
   markWalkable(eastJunction, 8);
   eastJunction.userData.mapRoadSurface = true;
   eastJunction.userData.permanentRoadGeometry = true;
   eastJunction.userData.roadCriticalDetail = true;
+  eastJunction.userData.walkablePriority = 8;
   root.add(eastJunction);
 
-  // Streetlamps along East Extended Road
+  // Kickable Streetlamps along East Extended Road
   for (let lx = 48; lx <= 255; lx += 32) {
     const lamp = new THREE.Group();
+    lamp.name = `arcade_lamp_east_${arcadeLampCount}`;
     lamp.position.set(lx, 0, -280.5);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.5, 8), metalFrameMat);
     pole.position.y = 3.25;
-    markSolid(pole, 0.05);
     const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.4), metalFrameMat);
     arm.position.set(0.6, 6.4, 0);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), createMaterial(0xfffbeb, 0.1, 0.9));
     bulb.position.set(1.2, 6.2, 0);
     lamp.add(pole, arm, bulb);
     root.add(lamp);
+    destructibles.push({
+      id: `arcade_lamp_east_${arcadeLampCount++}`,
+      mesh: lamp,
+      type: 'lamp',
+      position: { x: lx, y: 0, z: -280.5 },
+      destroyed: false,
+    });
+  }
+
+  // Kickable Trees along East Extended Road verge
+  for (let tx = 56; tx <= 248; tx += 30) {
+    const tree = new THREE.Group();
+    tree.name = `kickable_tree_arcade_east_${arcadeTreeCount}`;
+    tree.userData.kickableTree = true;
+    tree.userData.treePhysicsProfile = 'arcade_reusable';
+    tree.position.set(tx, 0, -265.5);
+    const visual = createStylizedCityTreeModel(1.05);
+    tree.add(visual);
+    root.add(tree);
+    destructibles.push({
+      id: `arcade_tree_east_${arcadeTreeCount++}`,
+      mesh: tree,
+      type: 'tree',
+      position: { x: tx, y: 0, z: -265.5 },
+      destroyed: false,
+    });
   }
 
   // South Access Boulevard: from Z = -321 down to Airport spine at Z = -441 (length: 120m)
-  const accessRoadSouth = new THREE.Mesh(new THREE.BoxGeometry(14, 0.15, 120), asphaltMat);
+  const accessRoadSouth = new THREE.Mesh(new THREE.BoxGeometry(14, 0.18, 122), asphaltMat);
   accessRoadSouth.name = 'arcade_access_boulevard_south';
-  accessRoadSouth.position.set(BUILDING_X, 0.08, -381);
+  accessRoadSouth.position.set(BUILDING_X, 0.09, -381);
   markWalkable(accessRoadSouth, 8);
   accessRoadSouth.userData.mapRoadSurface = true;
   accessRoadSouth.userData.permanentRoadGeometry = true;
   accessRoadSouth.userData.roadCriticalDetail = true;
+  accessRoadSouth.userData.walkablePriority = 8;
   root.add(accessRoadSouth);
+
+  // South Road Junction Connector Fillet with Airport Road (at X = BUILDING_X, Z = -441)
+  const southJunction = new THREE.Mesh(new THREE.BoxGeometry(20, 0.18, 20), asphaltMat);
+  southJunction.name = 'arcade_south_airport_junction';
+  southJunction.position.set(BUILDING_X, 0.09, -441);
+  markWalkable(southJunction, 8);
+  southJunction.userData.mapRoadSurface = true;
+  southJunction.userData.permanentRoadGeometry = true;
+  southJunction.userData.roadCriticalDetail = true;
+  southJunction.userData.walkablePriority = 8;
+  root.add(southJunction);
+
+  // Kickable Streetlamps & Trees along South Access Boulevard
+  for (let z = -420; z <= -330; z += 30) {
+    const lamp = new THREE.Group();
+    lamp.name = `arcade_lamp_south_${arcadeLampCount}`;
+    lamp.position.set(BUILDING_X + 8.5, 0, z);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.5, 8), metalFrameMat);
+    pole.position.y = 3.25;
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.25, 0.4), metalFrameMat);
+    arm.position.set(-0.6, 6.4, 0);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), createMaterial(0xfffbeb, 0.1, 0.9));
+    bulb.position.set(-1.2, 6.2, 0);
+    lamp.add(pole, arm, bulb);
+    root.add(lamp);
+    destructibles.push({
+      id: `arcade_lamp_south_${arcadeLampCount++}`,
+      mesh: lamp,
+      type: 'lamp',
+      position: { x: BUILDING_X + 8.5, y: 0, z },
+      destroyed: false,
+    });
+
+    const tree = new THREE.Group();
+    tree.name = `kickable_tree_arcade_south_${arcadeTreeCount}`;
+    tree.userData.kickableTree = true;
+    tree.userData.treePhysicsProfile = 'arcade_reusable';
+    tree.position.set(BUILDING_X - 8.5, 0, z);
+    const visual = createStylizedCityTreeModel(1.05);
+    tree.add(visual);
+    root.add(tree);
+    destructibles.push({
+      id: `arcade_tree_south_${arcadeTreeCount++}`,
+      mesh: tree,
+      type: 'tree',
+      position: { x: BUILDING_X - 8.5, y: 0, z },
+      destroyed: false,
+    });
+  }
 
   // Dashed lane dividers along south access road
   for (let z = -436; z <= -326; z += 7) {
     const dash = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 3.8), createMaterial(0xffffff, 0.4, 0.1));
-    dash.position.set(BUILDING_X, 0.17, z);
+    dash.position.set(BUILDING_X, 0.182, z);
     dash.userData.roadCriticalDetail = true;
     root.add(dash);
   }
@@ -913,20 +1020,24 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   // Large Arcade Forecourt & Parking Plaza (Z = -260 to -286, X = -18 to +34)
   const plazaWidth = 52;
   const plazaDepth = 26;
-  const plaza = new THREE.Mesh(new THREE.BoxGeometry(plazaWidth, 0.16, plazaDepth), asphaltMat);
+  const plaza = new THREE.Mesh(new THREE.BoxGeometry(plazaWidth, 0.18, plazaDepth), asphaltMat);
   plaza.name = 'arcade_forecourt_plaza';
   plaza.position.set(BUILDING_X, 0.09, -273);
   markWalkable(plaza, 8);
   plaza.userData.mapRoadSurface = true;
   plaza.userData.permanentRoadGeometry = true;
   plaza.userData.roadCriticalDetail = true;
+  plaza.userData.walkablePriority = 8;
   root.add(plaza);
 
   // Concrete sidewalk apron in front of the arcade entrance (Z = -289 to -285)
   const sidewalk = new THREE.Mesh(new THREE.BoxGeometry(BUILDING_W + 6, 0.22, 4), concretePaveMat);
   sidewalk.name = 'arcade_entrance_sidewalk';
-  sidewalk.position.set(BUILDING_X, 0.12, -287);
+  sidewalk.position.set(BUILDING_X, 0.11, -287);
   markWalkable(sidewalk, 8);
+  sidewalk.userData.walkablePriority = 8;
+  sidewalk.userData.sidewalkSurface = true;
+  sidewalk.userData.roadCriticalDetail = true;
   root.add(sidewalk);
 
   // Curb yellow boundary
@@ -939,7 +1050,7 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   // Parking Stalls (marked with white painted lines) located along entrance sidewalk (Z = -282)
   for (let px = -14; px <= 28; px += 4.5) {
     const line = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, 5.0), createMaterial(0xffffff));
-    line.position.set(px, 0.18, -282);
+    line.position.set(px, 0.182, -282);
     root.add(line);
   }
 
@@ -952,10 +1063,10 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
   ];
   lampPositions.forEach(([lx, lz], idx) => {
     const lamp = new THREE.Group();
+    lamp.name = `arcade_forecourt_lamp_${arcadeLampCount}`;
     lamp.position.set(lx, 0, lz);
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 6.5, 8), metalFrameMat);
     pole.position.y = 3.25;
-    markSolid(pole, 0.05);
 
     const head = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 0.6), metalFrameMat);
     head.position.y = 6.4;
@@ -963,14 +1074,35 @@ export function buildArcadeBuilding(): ArcadeBuildingResult {
     bulb.position.y = 6.2;
     lamp.add(pole, head, bulb);
     root.add(lamp);
+    destructibles.push({
+      id: `arcade_forecourt_lamp_${arcadeLampCount++}`,
+      mesh: lamp,
+      type: 'lamp',
+      position: { x: lx, y: 0, z: lz },
+      destroyed: false,
+    });
 
-    // Decorative planter with stylized city tree
+    // Decorative kickable tree with planter
+    const tree = new THREE.Group();
+    tree.name = `kickable_tree_arcade_forecourt_${arcadeTreeCount}`;
+    tree.userData.kickableTree = true;
+    tree.userData.treePhysicsProfile = 'arcade_reusable';
+    tree.position.set(lx - 2.5, 0, lz);
+
     const planter = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.0, 0.65, 12), concretePaveMat);
-    planter.position.set(lx - 2.5, 0.32, lz);
-    markSolid(planter);
-    const tree = createStylizedCityTreeModel(1.1);
-    tree.position.set(lx - 2.5, 0.65, lz);
-    root.add(planter, tree);
+    planter.position.y = 0.32;
+    const treeVisual = createStylizedCityTreeModel(1.1);
+    treeVisual.position.y = 0.33;
+    tree.add(planter, treeVisual);
+    root.add(tree);
+
+    destructibles.push({
+      id: `arcade_forecourt_tree_${arcadeTreeCount++}`,
+      mesh: tree,
+      type: 'tree',
+      position: { x: lx - 2.5, y: 0, z: lz },
+      destroyed: false,
+    });
   });
 
   // -------------------------------------------------------------------------

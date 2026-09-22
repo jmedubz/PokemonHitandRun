@@ -554,6 +554,7 @@ function createRoadStrip(
   y: number,
   name: string,
   thickness = 0.15,
+  cutoutPredicate?: (pos: THREE.Vector3) => boolean,
 ) {
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -576,6 +577,14 @@ function createRoadStrip(
     uvs.push(0, v, 1, v, 0, v, 1, v);
   }
   for (let i = 0; i < samples.length - 1; i++) {
+    if (cutoutPredicate) {
+      const p1 = samples[i].point.clone().addScaledVector(samples[i].normal, centerOffset);
+      const p2 = samples[i + 1].point.clone().addScaledVector(samples[i + 1].normal, centerOffset);
+      const mid = p1.clone().add(p2).multiplyScalar(0.5);
+      if (cutoutPredicate(p1) || cutoutPredicate(p2) || cutoutPredicate(mid)) {
+        continue;
+      }
+    }
     const a = i * 4;
     const b = a + 1;
     const bl = a + 2;
@@ -591,10 +600,16 @@ function createRoadStrip(
     indices.push(b, br, d, br, cr, d);
   }
   if (samples.length >= 2) {
-    const first = 0;
-    const last = (samples.length - 1) * 4;
-    indices.push(first, first + 2, first + 1, first + 1, first + 2, first + 3);
-    indices.push(last, last + 1, last + 2, last + 1, last + 3, last + 2);
+    const pStart = samples[0].point.clone().addScaledVector(samples[0].normal, centerOffset);
+    if (!cutoutPredicate || !cutoutPredicate(pStart)) {
+      const first = 0;
+      indices.push(first, first + 2, first + 1, first + 1, first + 2, first + 3);
+    }
+    const pEnd = samples[samples.length - 1].point.clone().addScaledVector(samples[samples.length - 1].normal, centerOffset);
+    if (!cutoutPredicate || !cutoutPredicate(pEnd)) {
+      const last = (samples.length - 1) * 4;
+      indices.push(last, last + 1, last + 2, last + 1, last + 3, last + 2);
+    }
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -636,6 +651,7 @@ function addRoadRibbon(
   addCenterLine = true,
   destructibles?: DestructibleProp[],
   lightIdPrefix = name,
+  cutoutPredicate?: (pos: THREE.Vector3) => boolean,
 ) {
   const group = new THREE.Group();
   group.name = name;
@@ -672,7 +688,7 @@ function addRoadRibbon(
     const curbMat = createSurfaceMaterial(0x9c9b91, 'concrete', 0.84, 0.02, 5, 20);
     for (const side of [-1, 1]) {
       const footpathOffset = side * (width / 2 + 1.65);
-      const footpath = createRoadStrip(samples, sidewalkMat, footpathOffset, 2.7, 0.205, `${name}_sidewalk_${side}`, 0.13);
+      const footpath = createRoadStrip(samples, sidewalkMat, footpathOffset, 2.7, 0.205, `${name}_sidewalk_${side}`, 0.13, cutoutPredicate);
       footpath.userData.walkable = true;
       footpath.userData.walkablePriority = 8;
       footpath.userData.sidewalkSurface = true;
@@ -680,7 +696,7 @@ function addRoadRibbon(
       group.add(footpath);
 
       const curbOffset = side * (width / 2 + 0.18);
-      const curb = createRoadStrip(samples, curbMat, curbOffset, 0.30, 0.225, `${name}_curb_${side}`, 0.22);
+      const curb = createRoadStrip(samples, curbMat, curbOffset, 0.30, 0.225, `${name}_curb_${side}`, 0.22, cutoutPredicate);
       curb.userData.curbSurface = true;
       curb.userData.roadCriticalDetail = true;
       group.add(curb);
@@ -695,10 +711,13 @@ function addRoadRibbon(
       const sideVector = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
       const yaw = Math.atan2(tangent.x, tangent.z);
       for (const side of [-1, 1]) {
+        const lightPos = p.clone().addScaledVector(sideVector, side * (width / 2 + 4.2));
+        if (cutoutPredicate && cutoutPredicate(lightPos)) continue;
+
         const light = new THREE.Group();
         const lightIndex = destructibles?.length ?? Math.round(s * 10 + side);
         light.name = `${lightIdPrefix}_kickable_light_${Math.round(s)}_${side < 0 ? 'left' : 'right'}`;
-        light.position.copy(p).addScaledVector(sideVector, side * (width / 2 + 4.2));
+        light.position.copy(lightPos);
         light.userData.colliderPadding = 0.01;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 7.5, 8), createMaterial(0x60717f, 0.45, 0.65));
         pole.name = `${light.name}_shaft`;
@@ -1205,7 +1224,29 @@ export function buildAirportDistrict(): AirportDistrict {
     [96, -412], [126, -394], [162, -376], [196, -354], [228, -328], [255, -298], [278, -266], [296, -230],
     [GOLDENROD_AIRPORT_LINK_X, -194], [GOLDENROD_AIRPORT_LINK_X, -150],
   ];
-  addRoadRibbon(root, 'airport_public_access_spine', publicRoadSpine, 15.5, roadMat, yellowMat, true, true, true, destructibles, 'airport_access_road');
+  const isAirportAccessCutout = (pos: THREE.Vector3) => {
+    // East Arcade Connector junction: Z = -273, X around 255..290
+    if (pos.x >= 252 && pos.x <= 292 && pos.z >= -285 && pos.z <= -261) return true;
+    // West Arcade Connector junction: Z = -273, X around -185..-150
+    if (pos.x >= -185 && pos.x <= -150 && pos.z >= -285 && pos.z <= -261) return true;
+    // South Arcade Connector junction: X = 8, Z around -448..-432
+    if (pos.x >= -4 && pos.x <= 20 && pos.z >= -448 && pos.z <= -432) return true;
+    return false;
+  };
+  addRoadRibbon(
+    root,
+    'airport_public_access_spine',
+    publicRoadSpine,
+    15.5,
+    roadMat,
+    yellowMat,
+    true,
+    true,
+    true,
+    destructibles,
+    'airport_access_road',
+    isAirportAccessCutout,
+  );
 
   // Physical manufactured direction signs. The faces auto-fit their wording and
   // have thickness, metal frames and real mounts instead of floating text planes.

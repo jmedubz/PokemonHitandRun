@@ -2492,7 +2492,7 @@ export default function App() {
     // ---------------------------------------------------------------------
     const npcManager = new NPCManager(
       scene,
-      (x, z, currentY = 0.12, maxDrop = 3.5, fallbackY = currentY) => collisionSystem.getGroundHeightNear(x, z, currentY, fallbackY, 0.8, maxDrop),
+      (x, z, currentY = 0.12, maxDrop = 120, fallbackY = 0.12) => collisionSystem.getGroundHeightNear(x, z, currentY, fallbackY, 0.8, maxDrop),
       (position, radius = 0.48, height = 1.75) => collisionSystem.canOccupy(position, radius, height),
       (position, radius = 0.48, height = 1.75) => collisionSystem.canFlyOccupy(position, radius, height),
       (x, z, clearance = 0) => collisionSystem.isRoadSurfaceAt(x, z, clearance),
@@ -6779,18 +6779,19 @@ export default function App() {
         Math.cos(plane.yaw) * Math.cos(plane.pitch) * plane.speed,
       );
       const planarVelocity = velocity.clone().setY(0);
+
+      // Distinct fuselage and wing elevation profiles
+      const wingElevation = plane.kind === 'trainer' ? 3.14
+        : plane.kind === 'commuter' ? 3.83
+        : plane.kind === 'zacks_plane' ? 3.50
+        : 3.08;
+      const fuselageRadius = plane.kind === 'jetliner' ? 2.05 : plane.kind === 'commuter' ? 1.25 : plane.kind === 'zacks_plane' ? 1.0 : 0.72;
+      const fuselageHalfWidth = Math.max(1.1, fuselageRadius * 1.05);
+
       const planeBottom = Math.min(previousPosition.y, plane.position.y) - plane.gearHeight - 0.12;
-      const planeHeight = plane.kind === 'jetliner' ? 7.8 : plane.kind === 'commuter' ? 5.7 : plane.kind === 'zacks_plane' ? 5.3 : 4.5;
-      const planeTop = Math.max(previousPosition.y, plane.position.y) - plane.gearHeight + planeHeight + 0.12;
-      const planeBody: VehicleCollisionBody = {
-        position: plane.position.clone(),
-        previousPosition: previousPosition.clone(),
-        yaw: plane.yaw,
-        velocity: planarVelocity,
-        mass: THREE.MathUtils.clamp(plane.mass * 2.7, 2.6, 8.5),
-        halfWidth: Math.max(plane.collisionRadius, plane.wingspan * 0.43),
-        halfLength: Math.max(plane.collisionRadius * 1.2, plane.length * 0.44),
-      };
+      const planeTop = Math.max(previousPosition.y, plane.position.y) + fuselageRadius * 2.1;
+      const wingBottom = Math.min(previousPosition.y, plane.position.y) + wingElevation - 0.35;
+      const wingTop = Math.max(previousPosition.y, plane.position.y) + wingElevation + 0.45;
 
       const candidates: Vehicle[] = [];
       const seen = new Set<string>();
@@ -6807,7 +6808,30 @@ export default function App() {
         const collisionHeight = Math.max(1.25, Number(vehicle.mesh.userData.vehicleCollisionHeight) || (vehicle.type === 'city_bus' ? 3.0 : 2.1));
         const vehicleBottom = vehiclePos.y - 0.12;
         const vehicleTop = vehiclePos.y + collisionHeight;
-        if (planeTop < vehicleBottom || planeBottom > vehicleTop) continue;
+
+        // Check horizontal offset from aircraft centerline in aircraft local frame
+        const dx = vehiclePos.x - plane.position.x;
+        const dz = vehiclePos.z - plane.position.z;
+        const lateralDist = Math.abs(dx * Math.cos(plane.yaw) - dz * Math.sin(plane.yaw));
+        const isFuselageZone = lateralDist <= fuselageHalfWidth + 1.2;
+
+        if (isFuselageZone) {
+          if (planeTop < vehicleBottom || planeBottom > vehicleTop) continue;
+        } else {
+          // Wing zone: vehicle must be tall enough to intersect the actual wing elevation
+          if (lateralDist > plane.wingspan * 0.50 + 0.5) continue;
+          if (wingTop < vehicleBottom || wingBottom > vehicleTop) continue;
+        }
+
+        const planeBody: VehicleCollisionBody = {
+          position: plane.position.clone(),
+          previousPosition: previousPosition.clone(),
+          yaw: plane.yaw,
+          velocity: planarVelocity,
+          mass: THREE.MathUtils.clamp(plane.mass * 2.7, 2.6, 8.5),
+          halfWidth: isFuselageZone ? fuselageHalfWidth : Math.max(plane.collisionRadius, plane.wingspan * 0.43),
+          halfLength: Math.max(plane.collisionRadius * 1.2, plane.length * 0.44),
+        };
 
         const yaw = vehicle.yaw ?? vehicle.rotationY ?? vehicle.mesh.rotation.y;
         const body = makeVehicleCollisionBody(
@@ -9916,7 +9940,7 @@ export default function App() {
 
         soundManager.playEngine(Math.max(2, plane.speed + plane.throttle * plane.maxSpeed * 0.22), plane.maxSpeed, plane.mesh.position);
         if (result.impact) {
-          const severityShake = result.impact.severity === 'major' ? 0.92 : result.impact.severity === 'moderate' ? 0.58 : 0.28;
+          const severityShake = result.impact.lodged ? 1.35 : result.impact.severity === 'major' ? 1.10 : result.impact.severity === 'moderate' ? 0.65 : 0.32;
           e.cameraShake = Math.max(e.cameraShake, severityShake);
           e.particles.startAircraftCrashEffect(
             plane.mesh,

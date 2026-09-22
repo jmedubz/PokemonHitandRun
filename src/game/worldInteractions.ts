@@ -6,6 +6,7 @@ import { createMaterial, createOakTreeModel } from './models';
 import { DestructibleProp, Vehicle } from '../types';
 import { playSoundEffect } from './audio';
 import { disposeTransientObject3D } from './dispose';
+import { getAircraftCollisionProbes } from './aircraft';
 
 type GrowthSpot = {
   key: string;
@@ -1930,26 +1931,10 @@ export class WorldInteractionManager {
     if (flatVelocity.lengthSq() < 0.0001) flatVelocity.set(0, 0, 1);
     flatVelocity.normalize();
 
-    const halfLength = aircraft.length * 0.46;
-    const halfWing = aircraft.wingspan * 0.46;
-    const offsets: Array<readonly [number, number]> = [
-      [0, 0],
-      [0, halfLength], [0, halfLength * 0.68],
-      [0, -halfLength], [0, -halfLength * 0.68],
-      [halfWing, 0], [-halfWing, 0],
-      [halfWing * 0.72, aircraft.length * 0.08], [-halfWing * 0.72, aircraft.length * 0.08],
-      [halfWing * 0.62, -aircraft.length * 0.12], [-halfWing * 0.62, -aircraft.length * 0.12],
-    ];
-    if (aircraft.kind === 'commuter' || aircraft.kind === 'jetliner') {
-      offsets.splice(5, 0,
-        [aircraft.wingspan * 0.28, aircraft.length * 0.015],
-        [-aircraft.wingspan * 0.28, aircraft.length * 0.015],
-      );
-    }
+    const upVector = new THREE.Vector3().crossVectors(forward, right).normalize();
+    const halfWing = aircraft.wingspan * 0.50;
+    const probes = getAircraftCollisionProbes(aircraft);
 
-    const probeRadius = Math.max(0.72, aircraft.collisionRadius * 0.54);
-    const bodyHeight = aircraft.kind === 'jetliner' ? 7.8 : aircraft.kind === 'commuter' ? 5.7 : aircraft.kind === 'zacks_plane' ? 5.3 : 4.5;
-    const baseOffset = Math.max(0, -aircraft.gearHeight - 0.03);
     const source = start.clone().lerp(end, 0.5);
     const frameTravel = end.clone().sub(start);
     const travelPlanarLenSq = frameTravel.x * frameTravel.x + frameTravel.z * frameTravel.z;
@@ -1970,8 +1955,7 @@ export class WorldInteractionManager {
 
       // Extremely cheap root-position broad phase first. dynamicPropBody() may need
       // a rendered Box3 for a tumbling prop, so never pay that cost for hundreds of
-      // distant street props every aircraft frame. The generous per-type allowance
-      // still covers long fence panels and loaded baggage dollies before exact tests.
+      // distant street props every aircraft frame.
       prop.mesh.getWorldPosition(candidatePoint);
       let centreT = 0;
       if (travelPlanarLenSq > 0.00001) {
@@ -1987,37 +1971,53 @@ export class WorldInteractionManager {
         : prop.type === 'tree' ? 1.6
         : prop.type === 'lamp' || prop.type === 'sign' ? 1.25
         : 1.0;
-      if (Math.hypot(candidatePoint.x - closest.x, candidatePoint.z - closest.z) > halfWing + approximatePropRadius + probeRadius + 1.0) continue;
+      if (Math.hypot(candidatePoint.x - closest.x, candidatePoint.z - closest.z) > halfWing + approximatePropRadius + 2.0) continue;
 
       const body = this.dynamicPropBody(prop);
-      const broadRadius = halfWing + body.radius + probeRadius + 1.0;
+      const broadRadius = halfWing + body.radius + 2.0;
       if (Math.hypot(body.centerX - closest.x, body.centerZ - closest.z) > broadRadius) continue;
-      const planeBottom = THREE.MathUtils.lerp(start.y, end.y, centreT) + baseOffset;
-      const planeTop = planeBottom + bodyHeight;
-      if (body.maxY < planeBottom - 0.18 || body.minY > planeTop + 0.18) continue;
 
       let bestDistanceSq = Infinity;
       let bestContact: THREE.Vector3 | null = null;
       let bestContactFraction = 1;
-      for (const [side, fore] of offsets) {
-        probeStart.copy(start).addScaledVector(right, side).addScaledVector(forward, fore);
-        probeEnd.copy(end).addScaledVector(right, side).addScaledVector(forward, fore);
-        probeStart.y += baseOffset;
-        probeEnd.y += baseOffset;
+
+      for (const probe of probes) {
+        probeStart.copy(start)
+          .addScaledVector(right, probe.local.x)
+          .addScaledVector(upVector, probe.local.y)
+          .addScaledVector(forward, probe.local.z);
+        probeEnd.copy(end)
+          .addScaledVector(right, probe.local.x)
+          .addScaledVector(upVector, probe.local.y)
+          .addScaledVector(forward, probe.local.z);
+
         const segment = probeEnd.clone().sub(probeStart);
         const segLenSq = segment.lengthSq();
-        const propCentre = new THREE.Vector3(body.centerX, THREE.MathUtils.clamp((body.minY + body.maxY) * 0.5, Math.min(probeStart.y, probeEnd.y), Math.max(probeStart.y, probeEnd.y) + bodyHeight), body.centerZ);
+        const propCentre = new THREE.Vector3(
+          body.centerX,
+          THREE.MathUtils.clamp((body.minY + body.maxY) * 0.5, Math.min(probeStart.y, probeEnd.y), Math.max(probeStart.y, probeEnd.y)),
+          body.centerZ,
+        );
         const t = segLenSq > 0.00001 ? THREE.MathUtils.clamp(propCentre.clone().sub(probeStart).dot(segment) / segLenSq, 0, 1) : 0;
         const pathPoint = probeStart.clone().lerp(probeEnd, t);
         const closestX = THREE.MathUtils.clamp(pathPoint.x, body.minX, body.maxX);
+        const closestY = THREE.MathUtils.clamp(pathPoint.y, body.minY, body.maxY);
         const closestZ = THREE.MathUtils.clamp(pathPoint.z, body.minZ, body.maxZ);
         const dx = pathPoint.x - closestX;
+        const dy = pathPoint.y - closestY;
         const dz = pathPoint.z - closestZ;
-        const dSq = dx * dx + dz * dz;
-        if (dSq <= probeRadius * probeRadius && dSq < bestDistanceSq) {
-          bestDistanceSq = dSq;
-          bestContactFraction = t;
-          bestContact = new THREE.Vector3(closestX, THREE.MathUtils.clamp(pathPoint.y + bodyHeight * 0.32, body.minY, body.maxY), closestZ);
+        const horizontalSq = dx * dx + dz * dz;
+        const verticalDist = Math.abs(dy);
+
+        // Precise 3D cylinder/disc probe check: horizontal distance must be within probe radius
+        // and vertical clearance must be within probe half-height
+        if (horizontalSq <= probe.radius * probe.radius && verticalDist <= probe.height * 0.5) {
+          const totalDistSq = horizontalSq + verticalDist * verticalDist;
+          if (totalDistSq < bestDistanceSq) {
+            bestDistanceSq = totalDistSq;
+            bestContactFraction = t;
+            bestContact = new THREE.Vector3(closestX, closestY, closestZ);
+          }
         }
       }
       if (!bestContact) continue;
@@ -2117,7 +2117,7 @@ export class WorldInteractionManager {
       speedLoss += THREE.MathUtils.clamp(speed * lossFactor, 0.01, isHeavy ? 0.58 : 0.28);
     }
 
-    // NPCs use the same swept aircraft footprint. They are intentionally resolved
+    // NPCs use the same swept 3D aircraft footprint. They are intentionally resolved
     // here, alongside movable props, because WorldInteractionManager already owns the
     // shared NPC impact/ragdoll language. This keeps the solid-building crash sweep
     // completely separate and unchanged.
@@ -2136,11 +2136,15 @@ export class WorldInteractionManager {
 
       let bestNpcT = 1;
       let bestNpcContact: THREE.Vector3 | null = null;
-      for (const [side, fore] of offsets) {
-        probeStart.copy(start).addScaledVector(right, side).addScaledVector(forward, fore);
-        probeEnd.copy(end).addScaledVector(right, side).addScaledVector(forward, fore);
-        probeStart.y += baseOffset;
-        probeEnd.y += baseOffset;
+      for (const probe of probes) {
+        probeStart.copy(start)
+          .addScaledVector(right, probe.local.x)
+          .addScaledVector(upVector, probe.local.y)
+          .addScaledVector(forward, probe.local.z);
+        probeEnd.copy(end)
+          .addScaledVector(right, probe.local.x)
+          .addScaledVector(upVector, probe.local.y)
+          .addScaledVector(forward, probe.local.z);
         const dx = probeEnd.x - probeStart.x;
         const dz = probeEnd.z - probeStart.z;
         const planarLenSq = dx * dx + dz * dz;
@@ -2148,16 +2152,18 @@ export class WorldInteractionManager {
           ? THREE.MathUtils.clamp(((npc.mesh.position.x - probeStart.x) * dx + (npc.mesh.position.z - probeStart.z) * dz) / planarLenSq, 0, 1)
           : 0;
         const px = THREE.MathUtils.lerp(probeStart.x, probeEnd.x, t);
-        const pz = THREE.MathUtils.lerp(probeStart.z, probeEnd.z, t);
         const py = THREE.MathUtils.lerp(probeStart.y, probeEnd.y, t);
-        const combinedRadius = probeRadius + npcRadius;
+        const pz = THREE.MathUtils.lerp(probeStart.z, probeEnd.z, t);
+        const combinedRadius = probe.radius + npcRadius;
         const pdx = npc.mesh.position.x - px;
         const pdz = npc.mesh.position.z - pz;
         if (pdx * pdx + pdz * pdz > combinedRadius * combinedRadius) continue;
-        if (py + bodyHeight < npcBottom - 0.10 || py > npcTop + 0.10) continue;
+        const clampedNpcY = THREE.MathUtils.clamp(py, npcBottom, npcTop);
+        const verticalDist = Math.abs(py - clampedNpcY);
+        if (verticalDist > probe.height * 0.5) continue;
         if (t < bestNpcT) {
           bestNpcT = t;
-          bestNpcContact = new THREE.Vector3(px, THREE.MathUtils.clamp(npcBottom + npcHeight * 0.48, py, py + bodyHeight), pz);
+          bestNpcContact = new THREE.Vector3(px, clampedNpcY, pz);
         }
       }
       if (!bestNpcContact) continue;
@@ -2165,10 +2171,7 @@ export class WorldInteractionManager {
       const impactDirection = flatVelocity.clone();
       const sourcePosition = start.clone().lerp(end, bestNpcT);
 
-      // Separate the character BEFORE the ragdoll/knockdown state is applied. The
-      // normal push helper refuses already-knocked bodies, which previously meant a
-      // high-speed reaction could begin while the NPC was still intersecting the
-      // aircraft. Two small collision-aware shoves are preferable to moving the plane.
+      // Separate the character BEFORE the ragdoll/knockdown state is applied.
       const immediateClearance = THREE.MathUtils.clamp(0.20 + speed * 0.035, 0.20, 0.84);
       let npcYielded = this.npcs.pushNPCFromPlayer(npc, sourcePosition, impactDirection, immediateClearance, true);
       if (npcYielded && immediateClearance > 0.40) {

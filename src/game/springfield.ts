@@ -169,14 +169,12 @@ export function buildSpringfield(): SpringfieldBuildResult {
   evergreenSt.position.set(-206.5, 0.08, 60); // X -310 -> -103
   streetsGroup.add(evergreenSt);
 
-  // PHYSICAL ROAD REBUILD: the former south boulevard was still a straight slab at
-  // X=-210, which put the actual driving lane through the Kwik-E-Mart footprint.
-  // Move the whole approach east into the open civic corridor instead of hiding the
-  // clash with traffic waypoints. It now runs from the north viaduct to the east
-  // tangent of the civic roundabout with real building clearance along its length.
-  const mainBlvdSouth = new THREE.Mesh(new THREE.BoxGeometry(16, 0.15, 139), asphaltMat);
+  // PHYSICAL ROAD REBUILD: the south boulevard runs from the north viaduct into
+  // the civic roundabout and the east central bridge approach with real building clearance.
+  // Extending to Z=-20 creates a 100% continuous, seamless road corridor through X=-181, Z=-34.
+  const mainBlvdSouth = new THREE.Mesh(new THREE.BoxGeometry(16, 0.15, 150), asphaltMat);
   mainBlvdSouth.name = 'springfield_main_boulevard_south';
-  mainBlvdSouth.position.set(-185, 0.08, -100.5); // Z -170 -> -31; overlaps the roundabout approach with no seam
+  mainBlvdSouth.position.set(-185, 0.08, -95); // Z -170 -> -20; meets civic roundabout and bridge road seamlessly
 
   // COMPACT CENTRAL BRIDGE T-JUNCTION --------------------------------------------
   // The previous 66m x 84m "grand intersection" solved the disconnected-road
@@ -360,16 +358,16 @@ export function buildSpringfield(): SpringfieldBuildResult {
   roundaboutInnerCurb.rotation.x = Math.PI / 2;
   roundaboutInnerCurb.position.set(-210, 0.20, -20);
   // The outer curb and pedestrian promenade are split into arcs so the north,
-  // south and east approaches have genuine openings. A continuous torus/ring here
-  // would visually place a curb/footpath straight across each road entrance.
+  // south and east approaches have genuine openings.
+  // The north-east entrance where Main Boulevard South merges into the roundabout
+  // and central bridge road (angles 344° through 0° to 60°) is a continuous vehicular corridor
+  // and is kept open with zero concrete or curb across the driving lanes.
   const roundaboutOuterCurb = new THREE.Group();
   roundaboutOuterCurb.name = 'springfield_roundabout_outer_curb';
   const roundaboutOuterWalk = new THREE.Group();
   roundaboutOuterWalk.name = 'springfield_roundabout_outer_pedestrian_walk';
   const approachGapArcs = [
-    { start: THREE.MathUtils.degToRad(16), length: THREE.MathUtils.degToRad(56) },
-    { start: THREE.MathUtils.degToRad(108), length: THREE.MathUtils.degToRad(144) },
-    { start: THREE.MathUtils.degToRad(288), length: THREE.MathUtils.degToRad(56) },
+    { start: THREE.MathUtils.degToRad(60), length: THREE.MathUtils.degToRad(284) },
   ];
   approachGapArcs.forEach(({ start, length }, index) => {
     const curbGeo = new THREE.TorusGeometry(29.82, 0.24, 6, Math.max(18, Math.round(72 * length / (Math.PI * 2))), length);
@@ -457,7 +455,7 @@ export function buildSpringfield(): SpringfieldBuildResult {
   addSpringfieldIntersection(-145, 60);
   // The east tangent of the civic roundabout keeps one transition apron. From here
   // the new curved approach leaves smoothly toward the compact bridge T-junction.
-  addSpringfieldIntersection(-180.5, -20, 10.0);
+  addSpringfieldIntersection(-180.5, -20, 11.5);
   streetsGroup.add(springfieldIntersections);
 
   for (let x = -305; x <= -115; x += 9) {
@@ -692,9 +690,12 @@ export function buildSpringfield(): SpringfieldBuildResult {
   // one shared centreline normal. This removes the small triangular grass notch and
   // concrete tongue that appeared where the curve tightened near the compact junction.
   for (const [side, label] of [[1, 'north'], [-1, 'south']] as const) {
+    const pts = side === 1
+      ? springfieldBridgeApproachPoints.filter((p) => p.x >= -174.0)
+      : springfieldBridgeApproachPoints;
     const path = makeOneSidedStripMesh(
       `springfield_compact_bridge_${label}_path`,
-      springfieldBridgeApproachPoints, side, 7.32, 10.65, sidewalkMat, 0.22, 0.055,
+      pts, side, 7.32, 10.65, sidewalkMat, 0.22, 0.055,
     );
     path.renderOrder = 20;
     path.userData.walkable = true;
@@ -704,7 +705,7 @@ export function buildSpringfield(): SpringfieldBuildResult {
 
     const curb = makeOneSidedStripMesh(
       `springfield_compact_bridge_${label}_curb`,
-      springfieldBridgeApproachPoints, side, 7.00, 7.32, curbMat, 0.30, 0.0,
+      pts, side, 7.00, 7.32, curbMat, 0.30, 0.0,
     );
     curb.userData.curbSurface = true;
     curb.userData.roadCriticalDetail = true;

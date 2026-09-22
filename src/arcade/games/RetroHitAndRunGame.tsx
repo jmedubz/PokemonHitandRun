@@ -239,11 +239,16 @@ export const RetroHitAndRunGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
     let currentStage = 1;
     let activeState: 'racing' | 'stage_clear' | 'busted' | 'timeout' | 'victory' = 'racing';
 
+    // Key & Touch input tracking
+    const keysPressed = new Set<string>();
+    let touchSteer = 0;
+    let touchGas: boolean | null = null;
+
     setSteerInputRef.current = (dir: number) => {
-      steerDir = dir;
+      touchSteer = dir;
     };
     setGasInputRef.current = (gas: boolean) => {
-      isAccelerating = gas;
+      touchGas = gas;
     };
 
     const triggerTurbo = () => {
@@ -282,6 +287,9 @@ export const RetroHitAndRunGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
     nextStageRef.current = startNextStage;
 
     const resetGame = () => {
+      keysPressed.clear();
+      touchSteer = 0;
+      touchGas = null;
       playerX = 0;
       playerZ = 0;
       playerSpeed = 80;
@@ -320,26 +328,30 @@ export const RetroHitAndRunGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
         setIsPaused((prev) => !prev);
         return;
       }
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') steerDir = -1;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') steerDir = 1;
-      if (e.code === 'ArrowUp' || e.code === 'KeyW') isAccelerating = true;
-      if (e.code === 'ArrowDown' || e.code === 'KeyS') isAccelerating = false;
-      if (e.code === 'Space' || e.code === 'ShiftLeft') triggerTurbo();
+
+      keysPressed.add(e.code);
+
+      if (e.code === 'Space' || e.code === 'ShiftLeft') {
+        e.preventDefault();
+        triggerTurbo();
+      }
       if (e.code === 'KeyR') resetGame();
       if (e.code === 'Escape') onExit();
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (
-        ((e.code === 'ArrowLeft' || e.code === 'KeyA') && steerDir === -1) ||
-        ((e.code === 'ArrowRight' || e.code === 'KeyD') && steerDir === 1)
-      ) {
-        steerDir = 0;
-      }
+      keysPressed.delete(e.code);
+    };
+
+    const onBlur = () => {
+      keysPressed.clear();
+      touchSteer = 0;
+      touchGas = null;
     };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
 
     let lastTime = performance.now();
 
@@ -383,23 +395,33 @@ export const RetroHitAndRunGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
           playSfx('crash');
         }
 
+        // Determine control inputs
+        const isLeft = keysPressed.has('ArrowLeft') || keysPressed.has('KeyA') || touchSteer === -1;
+        const isRight = keysPressed.has('ArrowRight') || keysPressed.has('KeyD') || touchSteer === 1;
+        const isUp = keysPressed.has('ArrowUp') || keysPressed.has('KeyW') || touchGas === true;
+        const isBraking = keysPressed.has('ArrowDown') || keysPressed.has('KeyS') || touchGas === false;
+
         // Acceleration & cruising speed
         const topSpeed = isTurbo ? turboSpeed : maxSpeed;
-        if (isAccelerating) {
-          playerSpeed = Math.min(topSpeed, playerSpeed + (isTurbo ? 150 : 85) * dt);
+        if (isBraking) {
+          // Player actively braking
+          playerSpeed = Math.max(35, playerSpeed - 140 * dt);
+        } else if (isUp || touchGas === null) {
+          // Accelerating forward
+          playerSpeed = Math.min(topSpeed, playerSpeed + (isTurbo ? 160 : 85) * dt);
         } else {
           // Coasting
-          playerSpeed = Math.max(70, playerSpeed - 60 * dt);
+          playerSpeed = Math.max(60, playerSpeed - 60 * dt);
         }
         setSpeedMph(Math.round(playerSpeed));
 
-        // Steering with centrifugal curve force
-        const currentSegment = getSegment(Math.floor(playerZ / ROAD_SEGMENT_LENGTH));
-        const curveForce = (currentSegment?.curve || 0) * (playerSpeed / maxSpeed) * 1.4;
+        // Steering - STRICTLY CONTROL-BASED (no automatic centrifugal drift force)
+        let steerInput = 0;
+        if (isLeft && !isRight) steerInput = -1;
+        else if (isRight && !isLeft) steerInput = 1;
 
-        playerX += steerDir * 2.5 * dt;
-        playerX -= curveForce * dt * 0.45;
-        playerX = Math.max(-1.4, Math.min(1.4, playerX));
+        playerX += steerInput * 2.6 * dt;
+        playerX = Math.max(-1.3, Math.min(1.3, playerX));
 
         // Off-road penalty
         if (Math.abs(playerX) > 1.0) {
@@ -798,6 +820,7 @@ export const RetroHitAndRunGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
       cancelAnimationFrame(animId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
     };
   }, [stage]);
 

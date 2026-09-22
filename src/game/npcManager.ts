@@ -76,6 +76,7 @@ type RoadSurfaceProvider = (x: number, z: number, clearance?: number) => boolean
 type PedestrianSurfaceProvider = (x: number, z: number) => boolean;
 type AquaticSurfaceProvider = (position: THREE.Vector3) => boolean;
 type AquaticDynamicObstacle = { position: THREE.Vector3; radius: number; height?: number; enabled?: () => boolean };
+type RecoverPenetrationProvider = (position: THREE.Vector3, radius?: number, height?: number) => THREE.Vector3;
 
 type PedestrianCrossingNode = {
   id: string;
@@ -345,6 +346,9 @@ export class NPCManager {
   private canFlyOccupy: CanFlyOccupyProvider;
   private isRoadSurface: RoadSurfaceProvider;
   private isPedestrianSurface: PedestrianSurfaceProvider;
+  private recoverPenetration: RecoverPenetrationProvider | null = null;
+  private npcScratchBox = new THREE.Box3();
+  private npcScratchChildBox = new THREE.Box3();
   /** Ground pedestrians may not intentionally enter these areas. Physical throws
    * can still put them there; this mask only governs ordinary navigation. */
   private groundForbidden: ((position: THREE.Vector3) => boolean) | null = null;
@@ -399,7 +403,8 @@ export class NPCManager {
     canOccupy?: CanOccupyProvider,
     canFlyOccupy?: CanFlyOccupyProvider,
     isRoadSurface?: RoadSurfaceProvider,
-    isPedestrianSurface?: PedestrianSurfaceProvider
+    isPedestrianSurface?: PedestrianSurfaceProvider,
+    recoverPenetration?: RecoverPenetrationProvider
   ) {
     this.scene = scene;
     this.groundHeight = groundHeight ?? (() => 0.12);
@@ -407,6 +412,7 @@ export class NPCManager {
     this.canFlyOccupy = canFlyOccupy ?? this.canOccupy;
     this.isRoadSurface = isRoadSurface ?? (() => false);
     this.isPedestrianSurface = isPedestrianSurface ?? (() => false);
+    this.recoverPenetration = recoverPenetration ?? null;
     this.collectPedestrianCrossings();
     this.spawnNamedPopulation();
     this.spawnCameoPopulation();
@@ -750,107 +756,252 @@ export class NPCManager {
     outDirection.normalize();
 
     const ownRadius = this.getNPCBodyRadius(npc);
-    const neighbors = this.queryNearbyAvoidanceNPCs(npc.mesh.position, 3.1);
+    const neighbors = this.queryNearbyAvoidanceNPCs(npc.mesh.position, 3.2);
     let steerX = 0;
     let steerZ = 0;
-    let repelX = 0;
-    let repelZ = 0;
     let speedScale = 1;
+    const leftX = -desiredDirection.z;
+    const leftZ = desiredDirection.x;
 
     for (const other of neighbors) {
       if (other === npc) continue;
       const dx = other.mesh.position.x - npc.mesh.position.x;
       const dz = other.mesh.position.z - npc.mesh.position.z;
       const distSq = dx * dx + dz * dz;
-      if (distSq < 0.000001 || distSq > 3.1 * 3.1) continue;
+      if (distSq < 0.000001 || distSq > 3.2 * 3.2) continue;
       const dist = Math.sqrt(distSq);
       const nx = dx / dist;
       const nz = dz / dist;
       const otherRadius = this.getNPCBodyRadius(other);
       const contact = ownRadius + otherRadius;
-      const personalSpace = contact + 0.34;
-      const ahead = outDirection.x * nx + outDirection.z * nz;
-      if (ahead < -0.38 && dist > personalSpace) continue;
+      const personalSpace = contact + 0.40;
+      const ahead = desiredDirection.x * nx + desiredDirection.z * nz;
+      if (ahead < -0.25 && dist > personalSpace) continue;
 
-      if (dist < contact + 0.05) {
-        const penetration = contact + 0.05 - dist;
-        repelX -= nx * penetration * 1.8;
-        repelZ -= nz * penetration * 1.8;
-        speedScale = Math.min(speedScale, 0.22);
+      // Close proximity: slow down smoothly rather than violently pushing backwards
+      if (dist < contact + 0.15 && ahead > -0.1) {
+        const gap = Math.max(0, dist - contact);
+        speedScale = Math.min(speedScale, THREE.MathUtils.clamp(gap / 0.15, 0.15, 0.55));
       }
 
-      if (ahead > -0.15 && dist < personalSpace + 1.15) {
-        const proximity = 1 - THREE.MathUtils.clamp((dist - personalSpace) / 1.15, 0, 1);
-        // Cross > 0 means the obstacle is to this walker’s left. Steer away from
-        // that occupied side. When almost perfectly head-on, everybody keeps left
-        // relative to their own heading, which naturally separates opposing flows.
-        const cross = outDirection.x * nz - outDirection.z * nx;
+      if (ahead > -0.15 && dist < personalSpace + 1.25) {
+        const proximity = 1 - THREE.MathUtils.clamp((dist - personalSpace) / 1.25, 0, 1);
+        const cross = desiredDirection.x * nz - desiredDirection.z * nx;
         let sideSign: number;
-        if (Math.abs(cross) < 0.20 && ahead > 0.45) sideSign = 1;
-        else sideSign = cross > 0 ? -1 : 1;
-        const leftX = -outDirection.z;
-        const leftZ = outDirection.x;
-        steerX += leftX * sideSign * proximity;
-        steerZ += leftZ * sideSign * proximity;
-        if (ahead > 0.2) {
-          const gapScale = THREE.MathUtils.clamp((dist - contact) / 1.05, 0.22, 1);
+        if (Math.abs(cross) < 0.22 && ahead > 0.35) {
+          sideSign = Number(npc.mesh.userData.crowdAvoidSide ?? 0);
+          if (sideSign !== 1 && sideSign !== -1) {
+            sideSign = Array.from(npc.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 2 === 0 ? 1 : -1;
+            npc.mesh.userData.crowdAvoidSide = sideSign;
+          }
+        } else {
+          sideSign = cross > 0 ? -1 : 1;
+        }
+        // Steer purely laterally (perpendicular to intended motion) to sidestep cleanly
+        steerX += leftX * sideSign * proximity * 1.5;
+        steerZ += leftZ * sideSign * proximity * 1.5;
+
+        if (ahead > 0.20) {
+          const gapScale = THREE.MathUtils.clamp((dist - contact) / 1.1, 0.25, 1);
           speedScale = Math.min(speedScale, gapScale);
         }
       }
     }
 
-    outDirection.x += steerX * (activeCrossing ? 0.42 : 0.78) + repelX * 0.62;
-    outDirection.z += steerZ * (activeCrossing ? 0.42 : 0.78) + repelZ * 0.62;
-    if (outDirection.lengthSq() < 0.0001) outDirection.copy(desiredDirection).setY(0);
-    outDirection.normalize();
+    outDirection.x = desiredDirection.x + steerX * 0.95;
+    outDirection.z = desiredDirection.z + steerZ * 0.95;
+    if (outDirection.lengthSq() < 0.0001) {
+      outDirection.copy(desiredDirection).setY(0);
+    } else {
+      outDirection.normalize();
+    }
+
+    // Mathematically prevent any backward component from ever being produced by avoidance.
+    // The forward projection must remain at least 0.32 (max ~71 degree deflection).
+    const fwdDot = outDirection.dot(desiredDirection);
+    if (fwdDot < 0.32) {
+      const lateralSign = (outDirection.x * leftX + outDirection.z * leftZ) >= 0 ? 1 : -1;
+      outDirection.x = desiredDirection.x * 0.35 + leftX * lateralSign * 0.93;
+      outDirection.z = desiredDirection.z * 0.35 + leftZ * lateralSign * 0.93;
+      outDirection.normalize();
+    }
+
     if (activeCrossing) {
-      // Crossing route remains committed to the opposite kerb. Allow enough lateral
-      // movement to pass another pedestrian, but never turn around in traffic.
-      this.tempAvoidRepel.copy(desiredDirection).setY(0).normalize();
-      outDirection.lerp(this.tempAvoidRepel, 0.48).normalize();
+      if (outDirection.dot(desiredDirection) < 0.45) {
+        outDirection.lerp(desiredDirection, 0.40).normalize();
+      }
     }
     return speedScale;
   }
 
-  /** Rare deadlock escape used only after normal local avoidance still predicts a
-   * collision on a zebra crossing. Every candidate keeps forward progress, remains
-   * inside the authored crossing corridor, respects world collision and still refuses
-   * to overlap another NPC. This prevents two polite pedestrians yielding forever. */
-  private findCrossingBypassStep(
+  /** Deadlock escape used when an NPC's intended movement step is blocked by another NPC.
+   * Works both inside zebra crossings (allowing wide multi-lane sidesteps) and on
+   * sidewalks/plazas so pedestrians never queue indefinitely behind someone. */
+  private findCrowdBypassStep(
     npc: NPC,
-    crossing: PedestrianCrossingNode,
+    crossing: PedestrianCrossingNode | null,
     desiredDirection: THREE.Vector3,
-    stepDistance: number
+    stepDistance: number,
+    bounds?: SpawnConfig['bounds'],
+    activeCrossing = false
   ): THREE.Vector3 | null {
     const forward = desiredDirection.clone().setY(0);
     if (forward.lengthSq() < 0.0001) return null;
     forward.normalize();
     const left = new THREE.Vector3(-forward.z, 0, forward.x);
-    let preferredSide = Number(npc.mesh.userData.crossingAvoidSide ?? 0);
+    let preferredSide = Number(npc.mesh.userData.crowdAvoidSide ?? 0);
     if (preferredSide !== 1 && preferredSide !== -1) {
       preferredSide = Array.from(npc.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 2 === 0 ? 1 : -1;
-      npc.mesh.userData.crossingAvoidSide = preferredSide;
+      npc.mesh.userData.crowdAvoidSide = preferredSide;
     }
 
-    const forwardStep = THREE.MathUtils.clamp(stepDistance * 0.72, 0.035, 0.18);
-    const lateralSteps = [0.07, 0.12, 0.18, 0.24];
+    const forwardStep = THREE.MathUtils.clamp(stepDistance * 0.85, 0.04, 0.35);
+    const forwardSteps = [forwardStep, forwardStep * 0.5, forwardStep * 0.15, 0.0];
+    const lateralSteps = activeCrossing && crossing
+      ? [0.45, 0.85, 1.30, 1.80, 2.35, 2.95, 3.60]
+      : [0.40, 0.75, 1.15, 1.60, 2.10];
+
     for (const lateral of lateralSteps) {
       for (const side of [preferredSide, -preferredSide]) {
-        const candidate = npc.mesh.position.clone()
-          .addScaledVector(forward, forwardStep)
-          .addScaledVector(left, lateral * side);
-        candidate.y = this.groundHeight(candidate.x, candidate.z, npc.mesh.position.y);
-        if (!this.isInsideCrossingCorridor(crossing, candidate)) continue;
-        if (this.groundForbidden?.(candidate)) continue;
-        if (!this.canOccupy(candidate, 0.48, 1.75)) continue;
-        if (this.pedestrianCandidateOverlapsNPC(npc, candidate, 0.025)) continue;
-        npc.mesh.userData.crossingAvoidSide = side;
-        return candidate;
+        for (const fwd of forwardSteps) {
+          const candidate = npc.mesh.position.clone()
+            .addScaledVector(forward, fwd)
+            .addScaledVector(left, lateral * side);
+          candidate.y = this.groundHeight(candidate.x, candidate.z, npc.mesh.position.y);
+          if (activeCrossing && crossing) {
+            if (!this.isInsideCrossingCorridor(crossing, candidate)) continue;
+          } else {
+            if (!this.pointWithinWanderBounds(candidate, bounds, 0.15)) continue;
+            if (this.isRoadSurface(candidate.x, candidate.z, 0.12)) continue;
+          }
+          if (this.groundForbidden?.(candidate)) continue;
+          if (!this.canOccupy(candidate, 0.44, 1.72)) continue;
+          if (this.pedestrianCandidateOverlapsNPC(npc, candidate, 0.02)) continue;
+
+          npc.mesh.userData.crowdAvoidSide = side;
+          return candidate;
+        }
       }
     }
-    // Flip preference for the next frame if both sides are currently sealed.
-    npc.mesh.userData.crossingAvoidSide = -preferredSide;
+    npc.mesh.userData.crowdAvoidSide = -preferredSide;
     return null;
+  }
+
+  /** Obstacle / Wall circumvention. When an NPC's movement step encounters a wall,
+   * building, fence, or prop, this method computes a bypass step along the wall surface
+   * or around the obstacle so they smoothly walk around it rather than getting stuck. */
+  private findPedestrianWorldBypassStep(
+    npc: NPC,
+    moveDirection: THREE.Vector3,
+    stepDistance: number,
+    bounds?: SpawnConfig['bounds'],
+    crossing?: PedestrianCrossingNode | null,
+    activeCrossing = false
+  ): THREE.Vector3 | null {
+    const pos = npc.mesh.position;
+    const forward = moveDirection.clone().setY(0);
+    if (forward.lengthSq() < 0.0001) return null;
+    forward.normalize();
+    const left = new THREE.Vector3(-forward.z, 0, forward.x);
+
+    const isLegalCandidate = (candidate: THREE.Vector3): boolean => {
+      candidate.y = this.groundHeight(candidate.x, candidate.z, pos.y);
+      if (activeCrossing && crossing) {
+        if (!this.isInsideCrossingCorridor(crossing, candidate)) return false;
+      } else {
+        if (!this.pointWithinWanderBounds(candidate, bounds, 0.15)) return false;
+        if (this.isRoadSurface(candidate.x, candidate.z, 0.12)) return false;
+      }
+      if (this.groundForbidden?.(candidate)) return false;
+      if (!this.canOccupy(candidate, 0.44, 1.72)) return false;
+      if (this.pedestrianCandidateOverlapsNPC(npc, candidate, 0.02)) return false;
+      return true;
+    };
+
+    // 1. Direct Axis Slide (X or Z component) along the wall plane
+    const stepDist = Math.max(0.04, stepDistance);
+    if (Math.abs(forward.x) > 0.15) {
+      const candX = pos.clone();
+      candX.x += forward.x * stepDist;
+      if (isLegalCandidate(candX)) {
+        if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
+        npc.walkDirection.lerp(new THREE.Vector3(Math.sign(forward.x), 0, 0), 0.40).normalize();
+        return candX;
+      }
+    }
+    if (Math.abs(forward.z) > 0.15) {
+      const candZ = pos.clone();
+      candZ.z += forward.z * stepDist;
+      if (isLegalCandidate(candZ)) {
+        if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
+        npc.walkDirection.lerp(new THREE.Vector3(0, 0, Math.sign(forward.z)), 0.40).normalize();
+        return candZ;
+      }
+    }
+
+    // 2. Circumvention Angles (probing forward and laterally around the wall / corner)
+    let preferredSide = Number(npc.mesh.userData.wallAvoidSide ?? 0);
+    if (preferredSide !== 1 && preferredSide !== -1) {
+      preferredSide = Array.from(npc.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 2 === 0 ? 1 : -1;
+      npc.mesh.userData.wallAvoidSide = preferredSide;
+    }
+
+    // Angles from ~26 deg up to 90 deg (forward and lateral only, NEVER backwards)
+    const angles = [0.45, 0.75, 1.10, 1.57];
+    const distances = [stepDist * 1.1, stepDist * 0.8, stepDist * 0.5];
+
+    for (const side of [preferredSide, -preferredSide]) {
+      for (const angle of angles) {
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle) * side;
+        const bypassDir = forward.clone().multiplyScalar(cosA).addScaledVector(left, sinA).normalize();
+
+        for (const dist of distances) {
+          const candidate = pos.clone().addScaledVector(bypassDir, dist);
+          if (isLegalCandidate(candidate)) {
+            npc.mesh.userData.wallAvoidSide = side;
+            if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
+            npc.walkDirection.lerp(bypassDir, 0.45).normalize();
+            return candidate;
+          }
+        }
+      }
+    }
+
+    npc.mesh.userData.wallAvoidSide = -preferredSide;
+    return null;
+  }
+
+  /** Depenetrate an NPC if geometry was placed on top of them or if they clipped a wall. */
+  private depenetrateNPC(npc: NPC): boolean {
+    const pos = npc.mesh.position;
+    if (this.canOccupy(pos, 0.44, 1.70)) return true;
+    if (this.recoverPenetration) {
+      const recovered = this.recoverPenetration(pos, 0.44, 1.70);
+      recovered.y = this.groundHeight(recovered.x, recovered.z, pos.y);
+      if (this.canOccupy(recovered, 0.44, 1.70)) {
+        npc.mesh.position.copy(recovered);
+        this.syncNPCPosition(npc);
+        return true;
+      }
+    }
+    const bounds = npc.mesh.userData.wanderBounds as SpawnConfig['bounds'] | undefined;
+    for (const r of [0.25, 0.55, 0.95, 1.45, 2.10]) {
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const candidate = new THREE.Vector3(pos.x + Math.cos(a) * r, pos.y, pos.z + Math.sin(a) * r);
+        candidate.y = this.groundHeight(candidate.x, candidate.z, pos.y);
+        if (this.pointWithinWanderBounds(candidate, bounds, 0.15) &&
+            !this.isRoadSurface(candidate.x, candidate.z, 0.10) &&
+            !this.groundForbidden?.(candidate) &&
+            this.canOccupy(candidate, 0.44, 1.70)) {
+          npc.mesh.position.copy(candidate);
+          this.syncNPCPosition(npc);
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private pedestrianCandidateOverlapsNPC(npc: NPC, candidate: THREE.Vector3, margin = 0.05): boolean {
@@ -875,6 +1026,10 @@ export class NPCManager {
     // is currently off-road, do not push them onto asphalt merely to resolve a crowd.
     const currentOnRoad = this.isRoadSurface(npc.mesh.position.x, npc.mesh.position.z, 0.08);
     if (!currentOnRoad && this.isRoadSurface(candidate.x, candidate.z, 0.08)) return false;
+    if (currentOnRoad && String(npc.mesh.userData.pedestrianRouteKind ?? '') === 'crossing') {
+      const crossing = this.getCrossingById(String(npc.mesh.userData.pedestrianCrossingId ?? ''));
+      if (crossing && !this.isInsideCrossingCorridor(crossing, candidate)) return false;
+    }
     return true;
   }
 
@@ -914,11 +1069,26 @@ export class NPCManager {
         const penetration = target - dist;
         const ownShare = otherMovable ? 0.5 : 1.0;
         const otherShare = otherMovable ? 0.5 : 0.0;
-        const amount = Math.min(0.11, penetration + 0.006);
+        // Gentle relaxation nudge (max 0.025m per frame) so physical separation never jerks or teleports
+        const amount = Math.min(0.025, penetration * 0.45);
+
+        // For walking NPCs, resolve overlap laterally (sideways) rather than pushing backward along their walking vector
+        let ownNx = nx;
+        let ownNz = nz;
+        if (npc.state === 'walking' && npc.walkDirection && npc.walkDirection.lengthSq() > 0.01) {
+          const fwdDot = ownNx * npc.walkDirection.x + ownNz * npc.walkDirection.z;
+          if (fwdDot < 0) {
+            const perpX = -npc.walkDirection.z;
+            const perpZ = npc.walkDirection.x;
+            const side = (ownNx * perpX + ownNz * perpZ) >= 0 ? 1 : -1;
+            ownNx = perpX * side;
+            ownNz = perpZ * side;
+          }
+        }
 
         this.tempCrowdCandidate.copy(npc.mesh.position);
-        this.tempCrowdCandidate.x += nx * amount * ownShare;
-        this.tempCrowdCandidate.z += nz * amount * ownShare;
+        this.tempCrowdCandidate.x += ownNx * amount * ownShare;
+        this.tempCrowdCandidate.z += ownNz * amount * ownShare;
         if (this.canSeparateNPCTo(npc, this.tempCrowdCandidate)) {
           npc.mesh.position.copy(this.tempCrowdCandidate);
           npc.mesh.userData.bodyPushTimer = Math.max(Number(npc.mesh.userData.bodyPushTimer ?? 0), 0.12);
@@ -926,9 +1096,22 @@ export class NPCManager {
         }
 
         if (otherShare > 0) {
+          let otherNx = -nx;
+          let otherNz = -nz;
+          if (other.state === 'walking' && other.walkDirection && other.walkDirection.lengthSq() > 0.01) {
+            const fwdDot = otherNx * other.walkDirection.x + otherNz * other.walkDirection.z;
+            if (fwdDot < 0) {
+              const perpX = -other.walkDirection.z;
+              const perpZ = other.walkDirection.x;
+              const side = (otherNx * perpX + otherNz * perpZ) >= 0 ? 1 : -1;
+              otherNx = perpX * side;
+              otherNz = perpZ * side;
+            }
+          }
+
           this.tempCrowdCandidate.copy(other.mesh.position);
-          this.tempCrowdCandidate.x -= nx * amount * otherShare;
-          this.tempCrowdCandidate.z -= nz * amount * otherShare;
+          this.tempCrowdCandidate.x += otherNx * amount * otherShare;
+          this.tempCrowdCandidate.z += otherNz * amount * otherShare;
           if (this.canSeparateNPCTo(other, this.tempCrowdCandidate)) {
             other.mesh.position.copy(this.tempCrowdCandidate);
             other.mesh.userData.bodyPushTimer = Math.max(Number(other.mesh.userData.bodyPushTimer ?? 0), 0.12);
@@ -1222,6 +1405,12 @@ export class NPCManager {
     origin.y = preferredGround;
     if (this.isRecoveryStandingClear(npc, origin)) return origin;
 
+    if (this.recoverPenetration) {
+      const recovered = this.recoverPenetration(origin, 0.43, 1.62);
+      recovered.y = this.groundHeight(recovered.x, recovered.z, npc.mesh.position.y, 120, preferredGround);
+      if (this.isRecoveryStandingClear(npc, recovered)) return recovered;
+    }
+
     const radii = [0.35, 0.65, 1.0, 1.4, 1.9, 2.5, 3.0].filter((r) => r <= maxRadius + 0.001);
     for (const radius of radii) {
       for (let i = 0; i < 16; i++) {
@@ -1256,10 +1445,17 @@ export class NPCManager {
     npc.mesh.userData.bodyPushTimer = 0;
     npc.kickedVelocity?.set(0, 0, 0);
 
+    if (this.recoverPenetration && !this.canOccupy(npc.mesh.position, 0.40, 0.75)) {
+      const rec = this.recoverPenetration(npc.mesh.position, 0.40, 0.75);
+      npc.mesh.position.x = rec.x;
+      npc.mesh.position.z = rec.z;
+    }
+
     // Start visibly down on the pavement rather than snapping upright on impact.
     const side = Number(npc.mesh.userData.recoverySide);
     npc.mesh.rotation.set(0.08 * side, Number(npc.mesh.userData.recoveryYaw), side * Math.PI * 0.5);
-    npc.mesh.position.y = ground + 0.16;
+    const validGround = Math.max(ground, this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, ground));
+    npc.mesh.position.y = validGround + 0.16;
   }
 
   /** Multi-stage cartoon get-up: lie still -> roll -> hands/knees -> crouch -> stand.
@@ -3751,40 +3947,63 @@ export class NPCManager {
   private chooseSafePedestrianDirection(npc: NPC, preferred?: THREE.Vector3): boolean {
     const bounds = npc.mesh.userData.wanderBounds as SpawnConfig['bounds'] | undefined;
     const origin = npc.mesh.position;
-    const baseAngle = preferred && preferred.lengthSq() > 0.001
-      ? Math.atan2(preferred.x, preferred.z)
-      : Math.random() * Math.PI * 2;
-    const offsets = [0, 0.38, -0.38, 0.76, -0.76, 1.18, -1.18, 1.57, -1.57, Math.PI];
-    const originPreferred = this.isPedestrianSurface(origin.x, origin.z);
-    let best: { dir: THREE.Vector3; score: number } | null = null;
-    for (const offset of offsets) {
-      const angle = baseAngle + offset;
-      const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
-      let safe = true;
-      let preferredSamples = 0;
-      for (const distance of [0.8, 1.6, 2.6]) {
-        const probe = origin.clone().addScaledVector(dir, distance);
-        if (!this.pointWithinWanderBounds(probe, bounds, 0.25) || this.isRoadSurface(probe.x, probe.z, 0.20)) {
-          safe = false;
-          break;
-        }
-        probe.y = this.groundHeight(probe.x, probe.z, origin.y);
-        if (!this.canOccupy(probe, 0.46, 1.72)) {
-          safe = false;
-          break;
-        }
-        if (this.isPedestrianSurface(probe.x, probe.z)) preferredSamples += 1;
-      }
-      if (!safe) continue;
-      // Staying on a footpath is strongly preferred. When walking on grass, a route
-      // that joins a nearby footpath also wins over equally-safe lawn wandering.
-      const score = preferredSamples * (originPreferred ? 3.6 : 2.6) - Math.abs(offset) * 0.35 + Math.random() * 0.08;
-      if (!best || score > best.score) best = { dir, score };
+    const hasPreferred = preferred && preferred.lengthSq() > 0.001;
+    let baseAngle: number;
+    if (hasPreferred) {
+      baseAngle = Math.atan2(preferred.x, preferred.z);
+    } else if (npc.walkDirection && npc.walkDirection.lengthSq() > 0.001) {
+      // Keep general forward momentum with a gentle natural wander bias
+      baseAngle = Math.atan2(npc.walkDirection.x, npc.walkDirection.z);
+    } else {
+      baseAngle = Math.random() * Math.PI * 2;
     }
-    if (!best) return false;
+    const offsets = [0, 0.38, -0.38, 0.78, -0.78, 1.25, -1.25, 1.57, -1.57, 2.0, -2.0, 2.5, -2.5, Math.PI];
+    const originPreferred = this.isPedestrianSurface(origin.x, origin.z);
+
+    // Multi-tier search: first seek full 2.2m clearance, then 1.4m, then 0.65m
+    for (const probeDistances of [[0.7, 1.4, 2.2], [0.6, 1.2], [0.55]]) {
+      let best: { dir: THREE.Vector3; score: number } | null = null;
+      for (const offset of offsets) {
+        const angle = baseAngle + offset;
+        const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+        let safe = true;
+        let preferredSamples = 0;
+        for (const distance of probeDistances) {
+          const probe = origin.clone().addScaledVector(dir, distance);
+          if (!this.pointWithinWanderBounds(probe, bounds, 0.15) || this.isRoadSurface(probe.x, probe.z, 0.15)) {
+            safe = false;
+            break;
+          }
+          probe.y = this.groundHeight(probe.x, probe.z, origin.y);
+          if (this.groundForbidden?.(probe)) {
+            safe = false;
+            break;
+          }
+          if (!this.canOccupy(probe, 0.44, 1.72)) {
+            safe = false;
+            break;
+          }
+          if (this.isPedestrianSurface(probe.x, probe.z)) preferredSamples += 1;
+        }
+        if (!safe) continue;
+        const score = preferredSamples * (originPreferred ? 3.6 : 2.6) - Math.abs(offset) * 0.25 + Math.random() * 0.08;
+        if (!best || score > best.score) best = { dir, score };
+      }
+      if (best) {
+        if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
+        npc.walkDirection.copy(best.dir);
+        npc.mesh.userData.directionStabilityTimer = 1.2;
+        return true;
+      }
+    }
+
+    // Fallback: reverse away from obstruction so NPC is never pointing into a wall
+    const fallbackAngle = baseAngle + Math.PI;
+    const fallbackDir = new THREE.Vector3(Math.sin(fallbackAngle), 0, Math.cos(fallbackAngle));
     if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
-    npc.walkDirection.copy(best.dir);
-    return true;
+    npc.walkDirection.copy(fallbackDir);
+    npc.mesh.userData.directionStabilityTimer = 1.0;
+    return false;
   }
 
   /**
@@ -3815,6 +4034,21 @@ export class NPCManager {
       if (!best || score < best.score) best = { crossing, approach: approach.clone(), exit: exit.clone(), score };
     }
     if (!best) return false;
+
+    // Distribute pedestrians across parallel lanes of the zebra crossing so they do
+    // not walk in single file or collide head-on in the center.
+    const laneAxis = best.crossing.roadAxis === 'x' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+    const laneIndex = (Array.from(npc.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0) % 5) - 2;
+    const laneOffset = laneIndex * 0.95;
+    const approachWithLane = best.approach.clone().addScaledVector(laneAxis, laneOffset);
+    const exitWithLane = best.exit.clone().addScaledVector(laneAxis, laneOffset);
+    approachWithLane.y = this.groundHeight(approachWithLane.x, approachWithLane.z, best.approach.y);
+    exitWithLane.y = this.groundHeight(exitWithLane.x, exitWithLane.z, best.exit.y);
+    if (this.canOccupy(approachWithLane, 0.46, 1.72) && !this.isRoadSurface(approachWithLane.x, approachWithLane.z, 0.10) &&
+        this.canOccupy(exitWithLane, 0.46, 1.72) && !this.isRoadSurface(exitWithLane.x, exitWithLane.z, 0.10)) {
+      best.approach.copy(approachWithLane);
+      best.exit.copy(exitWithLane);
+    }
 
     npc.mesh.userData.pedestrianRouteKind = 'crossing';
     npc.mesh.userData.pedestrianRoutePhase = 'approach';
@@ -3872,12 +4106,15 @@ export class NPCManager {
         npc.mesh.userData.pedestrianCrossing = false;
         return true;
       }
-      // Approach the crossing through the pedestrian network rather than walking a
-      // straight lawn/road diagonal. Sidewalk-safe headings that still make progress
-      // toward the curb are preferred; the road-entry guard remains the hard stop.
-      if (!this.chooseSafePedestrianDirection(npc, delta)) {
-        if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
-        npc.walkDirection.copy(delta.normalize());
+      // Approach the crossing through the pedestrian network with stabilized heading
+      const approachDirTimer = Number(npc.mesh.userData.pedestrianApproachDirTimer ?? 0) - dt;
+      npc.mesh.userData.pedestrianApproachDirTimer = approachDirTimer;
+      if (approachDirTimer <= 0 || !npc.walkDirection || npc.walkDirection.lengthSq() < 0.01) {
+        npc.mesh.userData.pedestrianApproachDirTimer = 0.9 + Math.random() * 0.5;
+        if (!this.chooseSafePedestrianDirection(npc, delta)) {
+          if (!npc.walkDirection) npc.walkDirection = new THREE.Vector3();
+          npc.walkDirection.copy(delta.normalize());
+        }
       }
       npc.mesh.userData.pedestrianCrossingTarget = approach;
       npc.mesh.userData.pedestrianCrossing = false;
@@ -4092,35 +4329,56 @@ export class NPCManager {
         // wall. Resolve X/Z independently to create a funny scrape/ricochet while
         // preserving whichever tangent direction is still free.
         const travel = npc.kickedVelocity.length() * dt;
-        const steps = THREE.MathUtils.clamp(Math.ceil(travel / 0.30), 1, 10);
+        const steps = THREE.MathUtils.clamp(Math.ceil(travel / 0.20), 1, 16);
         const stepDt = dt / steps;
         let wallImpact = false;
+        const bodyRadius = THREE.MathUtils.clamp(this.getNPCBodyRadius(npc), 0.40, 0.65);
+        const bodyHeight = 1.55;
+
         for (let step = 0; step < steps; step++) {
+          const currentGround = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
           const nextY = npc.mesh.position.y + npc.kickedVelocity.y * stepDt;
-          const verticalProbe = npc.mesh.position.clone();
-          verticalProbe.y = nextY;
-          if (this.canOccupy(verticalProbe, 0.42, 1.55)) {
-            npc.mesh.position.y = nextY;
-          } else if (npc.kickedVelocity.y > 0.5) {
-            // Ceiling/overhang contact: kill most upward momentum without teleporting.
-            npc.kickedVelocity.y *= -0.18;
-            wallImpact = true;
+
+          if (nextY <= currentGround) {
+            npc.mesh.position.y = currentGround;
+          } else {
+            const verticalProbe = npc.mesh.position.clone();
+            verticalProbe.y = nextY;
+            if (this.canOccupy(verticalProbe, bodyRadius, bodyHeight)) {
+              npc.mesh.position.y = nextY;
+            } else if (npc.kickedVelocity.y > 0.5) {
+              // Ceiling/overhang contact: kill most upward momentum without teleporting.
+              npc.kickedVelocity.y *= -0.18;
+              wallImpact = true;
+            }
           }
 
           const xProbe = npc.mesh.position.clone();
           xProbe.x += npc.kickedVelocity.x * stepDt;
-          if (this.canOccupy(xProbe, 0.42, 1.55)) npc.mesh.position.x = xProbe.x;
-          else {
+          if (this.canOccupy(xProbe, bodyRadius, bodyHeight)) {
+            npc.mesh.position.x = xProbe.x;
+          } else {
             npc.kickedVelocity.x = THREE.MathUtils.clamp(npc.kickedVelocity.x * -0.38, -17, 17);
             wallImpact = true;
+            if (this.recoverPenetration) {
+              const rec = this.recoverPenetration(npc.mesh.position, bodyRadius, bodyHeight);
+              npc.mesh.position.x = rec.x;
+              npc.mesh.position.z = rec.z;
+            }
           }
 
           const zProbe = npc.mesh.position.clone();
           zProbe.z += npc.kickedVelocity.z * stepDt;
-          if (this.canOccupy(zProbe, 0.42, 1.55)) npc.mesh.position.z = zProbe.z;
-          else {
+          if (this.canOccupy(zProbe, bodyRadius, bodyHeight)) {
+            npc.mesh.position.z = zProbe.z;
+          } else {
             npc.kickedVelocity.z = THREE.MathUtils.clamp(npc.kickedVelocity.z * -0.38, -17, 17);
             wallImpact = true;
+            if (this.recoverPenetration) {
+              const rec = this.recoverPenetration(npc.mesh.position, bodyRadius, bodyHeight);
+              npc.mesh.position.x = rec.x;
+              npc.mesh.position.z = rec.z;
+            }
           }
 
           // A thrown/kicked character remains a physical body. Resolve contact
@@ -4128,6 +4386,17 @@ export class NPCManager {
           // straight through Person B without transferring momentum.
           this.resolveThrownNPCSecondaryImpact(npc);
         }
+
+        const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
+        if (npc.mesh.position.y < ground) {
+          npc.mesh.position.y = ground;
+        }
+        if (this.recoverPenetration && !this.canOccupy(npc.mesh.position, bodyRadius, bodyHeight)) {
+          const rec = this.recoverPenetration(npc.mesh.position, bodyRadius, bodyHeight);
+          npc.mesh.position.x = rec.x;
+          npc.mesh.position.z = rec.z;
+        }
+
         if (wallImpact && Number(npc.mesh.userData.wallImpactCooldown ?? 0) <= 0) {
           npc.mesh.userData.wallImpactCooldown = 0.18;
           this.spawnImpactBurst(npc.mesh.position.clone().add(new THREE.Vector3(0, 0.9, 0)), 0xffffff, 0.7);
@@ -4154,7 +4423,6 @@ export class NPCManager {
         if (legL) legL.rotation.x -= flail * dt * 5;
         if (legR) legR.rotation.x += flail * dt * 5;
 
-        const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
         // Absolute failsafe for corrupted saves/impulses: after several seconds in
         // the air, strongly bias downward rather than allowing an eternal sky NPC.
         if (Number(npc.mesh.userData.airborneSeconds ?? 0) > 4.5) {
@@ -4179,8 +4447,9 @@ export class NPCManager {
               npc.knockoutTimer = 4.5 + Math.random() * 2.5;
               const side = Number(npc.mesh.userData.spinDirection ?? 1) >= 0 ? 1 : -1;
               npc.mesh.rotation.set(0.08 * side, npc.mesh.rotation.y, side * Math.PI / 2);
-              npc.mesh.position.copy(this.findRecoveryPosition(npc, ground));
-              npc.mesh.position.y += 0.16;
+              const safeLandingPos = this.findRecoveryPosition(npc, ground);
+              npc.mesh.position.copy(safeLandingPos);
+              npc.mesh.position.y = Math.max(ground, safeLandingPos.y) + 0.16;
             } else {
               // Ordinary impacts also get a readable get-up. Do not snap from a
               // ridiculous ragdoll directly into a walking pose on the landing frame.
@@ -4194,7 +4463,12 @@ export class NPCManager {
 
       if (npc.state === 'knocked_out') {
         const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
-        npc.mesh.position.y = ground + 0.16;
+        npc.mesh.position.y = Math.max(ground, npc.mesh.position.y) + 0.16;
+        if (this.recoverPenetration && !this.canOccupy(npc.mesh.position, 0.40, 0.75)) {
+          const rec = this.recoverPenetration(npc.mesh.position, 0.40, 0.75);
+          npc.mesh.position.x = rec.x;
+          npc.mesh.position.z = rec.z;
+        }
         const permanentlyDown = this.isDeadBody(npc) || !!npc.mesh.userData.noRecover;
         if (!permanentlyDown) {
           npc.knockoutTimer = Math.max(0, (npc.knockoutTimer ?? 0) - dt);
@@ -4431,6 +4705,8 @@ export class NPCManager {
 
       const crowdYieldTimer = Math.max(0, Number(npc.mesh.userData.crowdYieldTimer ?? 0) - dt);
       npc.mesh.userData.crowdYieldTimer = crowdYieldTimer;
+      const directionStabilityTimer = Math.max(0, Number(npc.mesh.userData.directionStabilityTimer ?? 0) - dt);
+      npc.mesh.userData.directionStabilityTimer = directionStabilityTimer;
 
       const crossingMustProgress = routeKind === 'crossing' && routePhase === 'cross';
       if ((npc.state === 'walking' || npc.state === 'panicking') && npc.walkDirection && !routeWaiting && (crowdYieldTimer <= 0 || crossingMustProgress)) {
@@ -4452,11 +4728,18 @@ export class NPCManager {
         const bounds = npc.mesh.userData.wanderBounds as SpawnConfig['bounds'] | undefined;
         if (bounds) {
           // Crossing/escape routes are authored inside their wander area, so do not
-          // reverse direction mid-crossing. Ordinary wandering may turn at a bound.
+          // reverse direction mid-crossing. Ordinary wandering turns inwards towards the center.
           if (!activeCrossing && activeKind !== 'road_escape') {
             if (this.tempNext.x < bounds.minX || this.tempNext.x > bounds.maxX ||
                 this.tempNext.z < bounds.minZ || this.tempNext.z > bounds.maxZ) {
-              this.chooseSafePedestrianDirection(npc, npc.walkDirection.clone().multiplyScalar(-1));
+              const centerDir = new THREE.Vector3(
+                (bounds.minX + bounds.maxX) * 0.5 - npc.mesh.position.x,
+                0,
+                (bounds.minZ + bounds.maxZ) * 0.5 - npc.mesh.position.z
+              ).normalize();
+              this.chooseSafePedestrianDirection(npc, centerDir);
+              npc.walkTimer = 2.5 + Math.random() * 2.5;
+              npc.mesh.userData.directionStabilityTimer = 1.5;
               const reboundCrowdScale = mode === 'ground'
                 ? this.computePedestrianAvoidance(npc, npc.walkDirection, false, this.tempAvoidDirection)
                 : 1;
@@ -4465,8 +4748,8 @@ export class NPCManager {
               this.tempNext.copy(npc.mesh.position).add(this.tempStep);
             }
           }
-          this.tempNext.x = THREE.MathUtils.clamp(this.tempNext.x, bounds.minX, bounds.maxX);
-          this.tempNext.z = THREE.MathUtils.clamp(this.tempNext.z, bounds.minZ, bounds.maxZ);
+          this.tempNext.x = THREE.MathUtils.clamp(this.tempNext.x, bounds.minX + 0.15, bounds.maxX - 0.15);
+          this.tempNext.z = THREE.MathUtils.clamp(this.tempNext.z, bounds.minZ + 0.15, bounds.maxZ - 0.15);
         }
         const ground = this.groundHeight(this.tempNext.x, this.tempNext.z, npc.mesh.position.y);
         this.tempNext.y = mode === 'hover' ? ground + 1.0 + Math.sin(now * 3) * 0.18 : ground;
@@ -4477,66 +4760,102 @@ export class NPCManager {
         const legalRecoveryRoadStep = activeKind === 'road_escape' && currentOnRoad;
         const illegalRoadEntry = candidateOnRoad && !legalCrossingRoadStep && !legalRecoveryRoadStep;
         const illegalWaterEntry = mode === 'ground' && !!this.groundForbidden?.(this.tempNext);
-        const blockedByWorld = mode !== 'hover' && !this.canOccupy(this.tempNext, 0.48, 1.75);
-        const blockedByCrowd = mode === 'ground' && this.pedestrianCandidateOverlapsNPC(npc, this.tempNext, 0.035);
+        const blockedByWorld = mode !== 'hover' && !this.canOccupy(this.tempNext, 0.44, 1.72);
+        const blockedByCrowd = mode === 'ground' && this.pedestrianCandidateOverlapsNPC(npc, this.tempNext, 0.025);
 
         if (illegalRoadEntry || illegalWaterEntry) {
           // Absolute navigation masks: ordinary pedestrians cannot jaywalk and they
-          // cannot intentionally walk into open river water. Swimming NPCs use their
-          // separate aquatic mode above; physical kicks/throws remain unrestricted.
-
-          if (!this.chooseSafePedestrianDirection(npc, npc.walkDirection)) {
-            npc.state = 'idle';
-            npc.walkTimer = 0.45 + Math.random() * 0.75;
-          } else {
-            npc.walkTimer = Math.max(npc.walkTimer ?? 0, 0.7);
-          }
+          // cannot intentionally walk into open river water. Instead of reversing 180 deg
+          // (which would bounce into a building), steer along the sidewalk tangent.
+          const walkDir = (npc.walkDirection && npc.walkDirection.lengthSq() > 0.01) ? npc.walkDirection : new THREE.Vector3(1, 0, 0);
+          const leftTangent = new THREE.Vector3(-walkDir.z, 0, walkDir.x);
+          const rightTangent = new THREE.Vector3(walkDir.z, 0, -walkDir.x);
+          const preferredTangent = (npc.id.charCodeAt(0) % 2 === 0) ? leftTangent : rightTangent;
+          this.chooseSafePedestrianDirection(npc, preferredTangent);
+          npc.walkTimer = 2.5 + Math.random() * 2.5;
+          npc.mesh.userData.directionStabilityTimer = 1.4;
           this.tempNext.copy(npc.mesh.position);
         } else if (blockedByWorld) {
-          // A crossing is a movement-only zone. First try a small forward-biased
-          // sidestep that stays inside the zebra corridor; only pause when there is
-          // genuinely no collision-free space this frame.
-          const bypass = activeCrossing && crossing
-            ? this.findCrossingBypassStep(npc, crossing, npc.walkDirection, Math.max(this.tempStep.length(), speed * dt))
-            : null;
+          // Obstacle / wall circumvention: smoothly slide along the wall or walk around it
+          const bypass = this.findPedestrianWorldBypassStep(
+            npc,
+            moveDirection,
+            Math.max(this.tempStep.length(), speed * dt),
+            bounds,
+            crossing,
+            activeCrossing
+          );
           if (bypass) {
             this.tempNext.copy(bypass);
             npc.mesh.position.copy(this.tempNext);
             npc.mesh.userData.crowdYieldTimer = 0;
-          } else if (activeCrossing || activeKind === 'road_escape') {
-            npc.mesh.userData.crowdYieldTimer = activeCrossing ? 0.045 : npc.mesh.userData.crowdYieldTimer;
-            this.tempNext.copy(npc.mesh.position);
           } else {
-            this.chooseSafePedestrianDirection(npc, npc.walkDirection);
-            npc.walkTimer = 0.45 + Math.random() * 0.8;
+            // Boxed in: find an open sidewalk heading, avoiding rapid 180 degree flips
+            this.chooseSafePedestrianDirection(npc);
+            npc.walkTimer = 2.0 + Math.random() * 2.0;
+            npc.mesh.userData.directionStabilityTimer = 1.4;
             this.tempNext.copy(npc.mesh.position);
+            if (!this.canOccupy(npc.mesh.position, 0.44, 1.70)) {
+              this.depenetrateNPC(npc);
+            }
           }
         } else if (blockedByCrowd) {
-          // Local avoidance already attempted a sidestep. On a crossing, add a
-          // deterministic forward-biased pass so opposing pedestrians cannot politely
-          // face each other forever. We still never overlap/walk through another NPC.
-          const bypass = activeCrossing && crossing
-            ? this.findCrossingBypassStep(npc, crossing, npc.walkDirection, Math.max(this.tempStep.length(), speed * dt))
-            : null;
+          // Crowd avoidance: sidestep around other pedestrians on both crossings and pavements
+          const bypass = this.findCrowdBypassStep(
+            npc,
+            crossing,
+            moveDirection,
+            Math.max(this.tempStep.length(), speed * dt),
+            bounds,
+            activeCrossing
+          );
           if (bypass) {
+            const bypassDelta = bypass.clone().sub(npc.mesh.position).setY(0);
             this.tempNext.copy(bypass);
             npc.mesh.position.copy(this.tempNext);
             npc.mesh.userData.crowdYieldTimer = 0;
+            npc.mesh.userData.crowdWaitTime = 0;
+            if (bypassDelta.lengthSq() > 0.001) {
+              npc.walkDirection.lerp(bypassDelta.normalize(), 0.30).normalize();
+            }
           } else {
-            npc.mesh.userData.crowdYieldTimer = activeCrossing ? 0.045 : 0.10 + Math.random() * 0.12;
+            const waitTime = Number(npc.mesh.userData.crowdWaitTime ?? 0) + dt;
+            npc.mesh.userData.crowdWaitTime = waitTime;
+            if (waitTime > 1.25) {
+              npc.mesh.userData.crowdWaitTime = 0;
+              if (activeCrossing && crossing) {
+                npc.mesh.userData.crowdAvoidSide = -Number(npc.mesh.userData.crowdAvoidSide ?? 1);
+              } else {
+                this.chooseSafePedestrianDirection(npc);
+                npc.walkTimer = 2.0 + Math.random() * 2.0;
+                npc.mesh.userData.directionStabilityTimer = 1.4;
+              }
+            }
+            npc.mesh.userData.crowdYieldTimer = activeCrossing ? 0.04 : 0.10 + Math.random() * 0.08;
             this.tempNext.copy(npc.mesh.position);
           }
         } else {
           npc.mesh.position.copy(this.tempNext);
         }
-        const facingDirection = this.tempStep.lengthSq() > 0.000001 ? this.tempStep : npc.walkDirection;
-        npc.mesh.rotation.y = Math.atan2(facingDirection.x, facingDirection.z);
+
+        const facing = (npc.walkDirection && npc.walkDirection.lengthSq() > 0.001) ? npc.walkDirection : this.tempStep;
+        if (facing.lengthSq() > 0.0001) {
+          const targetHeading = Math.atan2(facing.x, facing.z);
+          let diff = targetHeading - npc.mesh.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          npc.mesh.rotation.y += diff * Math.min(1, dt * 10);
+        }
+
+        const actualStepDist = this.tempNext.distanceTo(npc.mesh.position);
+        const actualSpeed = actualStepDist / Math.max(0.0001, dt);
+        const animFactor = THREE.MathUtils.clamp(actualSpeed / 1.6, 0, 1.2);
 
         const legL = npc.mesh.getObjectByName('leg_left');
         const legR = npc.mesh.getObjectByName('leg_right');
         const armL = npc.mesh.getObjectByName('arm_left');
         const armR = npc.mesh.getObjectByName('arm_right');
-        const stride = Math.sin(now * (npc.state === 'panicking' ? 13 : 8)) * (npc.state === 'panicking' ? 0.7 : 0.4);
+        const stride = Math.sin(now * (npc.state === 'panicking' ? 13 : 8)) * (npc.state === 'panicking' ? 0.7 : 0.4) * animFactor;
         if (legL) legL.rotation.x = stride;
         if (legR) legR.rotation.x = -stride;
         if (armL) armL.rotation.x = -stride * 0.55;
@@ -4550,6 +4869,47 @@ export class NPCManager {
       } else {
         const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y);
         npc.mesh.position.y = mode === 'hover' ? ground + 1.0 + Math.sin(now * 2.5) * 0.16 : ground;
+      }
+
+      // Anti-stuck watchdog: ensure no pedestrian gets trapped against world geometry or behind others
+      if ((npc.state === 'walking' || npc.state === 'panicking') && mode === 'ground' && !routeWaiting) {
+        if (!npc.mesh.userData.antiStuckPos) {
+          npc.mesh.userData.antiStuckPos = npc.mesh.position.clone();
+          npc.mesh.userData.antiStuckTimer = 0;
+        }
+        const lastStuckPos = npc.mesh.userData.antiStuckPos as THREE.Vector3;
+        const distMoved = npc.mesh.position.distanceTo(lastStuckPos);
+        if (distMoved < 0.04) {
+          npc.mesh.userData.antiStuckTimer = Number(npc.mesh.userData.antiStuckTimer ?? 0) + dt;
+          if (Number(npc.mesh.userData.antiStuckTimer) >= 2.5) {
+            npc.mesh.userData.antiStuckTimer = 0;
+            npc.mesh.userData.crowdYieldTimer = 0;
+            npc.mesh.userData.crowdWaitTime = 0;
+            if (!this.canOccupy(npc.mesh.position, 0.44, 1.70)) {
+              this.depenetrateNPC(npc);
+            }
+            const isCrossing = routeKind === 'crossing' && routePhase === 'cross';
+            const curCrossing = isCrossing ? this.getCrossingById(String(npc.mesh.userData.pedestrianCrossingId ?? '')) : null;
+            if (isCrossing && curCrossing) {
+              npc.mesh.userData.crowdAvoidSide = -Number(npc.mesh.userData.crowdAvoidSide ?? 1);
+              const lateralAxis = curCrossing.roadAxis === 'x' ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
+              const testOffset = lateralAxis.clone().multiplyScalar(Number(npc.mesh.userData.crowdAvoidSide) * 1.2);
+              const unstuckCand = npc.mesh.position.clone().add(testOffset);
+              unstuckCand.y = this.groundHeight(unstuckCand.x, unstuckCand.z, npc.mesh.position.y);
+              if (this.isInsideCrossingCorridor(curCrossing, unstuckCand) && this.canOccupy(unstuckCand, 0.44, 1.72)) {
+                npc.mesh.position.copy(unstuckCand);
+              }
+            } else {
+              this.chooseSafePedestrianDirection(npc);
+              npc.walkTimer = 2.5 + Math.random() * 2.5;
+              npc.mesh.userData.directionStabilityTimer = 1.5;
+            }
+            lastStuckPos.copy(npc.mesh.position);
+          }
+        } else {
+          lastStuckPos.copy(npc.mesh.position);
+          npc.mesh.userData.antiStuckTimer = Math.max(0, Number(npc.mesh.userData.antiStuckTimer ?? 0) - dt * 2);
+        }
       }
 
       this.syncNPCPosition(npc);
@@ -4992,6 +5352,17 @@ export class NPCManager {
     npc.mesh.userData.ragdollSpinZ = (7.0 + Math.random() * 6.5) * spin;
     npc.mesh.userData.ragdollFlailPhase = Math.random() * Math.PI * 2;
     npc.mesh.userData.wallImpactCooldown = 0;
+
+    const ground = this.groundHeight(npc.mesh.position.x, npc.mesh.position.z, npc.mesh.position.y, 120, 0.12);
+    if (npc.mesh.position.y < ground) {
+      npc.mesh.position.y = ground;
+    }
+    if (this.recoverPenetration && !this.canOccupy(npc.mesh.position, 0.42, 1.55)) {
+      const rec = this.recoverPenetration(npc.mesh.position, 0.42, 1.55);
+      npc.mesh.position.x = rec.x;
+      npc.mesh.position.z = rec.z;
+    }
+
     if (!npc.kickedVelocity) npc.kickedVelocity = new THREE.Vector3();
     const dir = direction.clone();
     dir.y = 0;

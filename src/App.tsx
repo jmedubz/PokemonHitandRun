@@ -16,6 +16,7 @@ import {
   ArcadeMachineInfo,
 } from './types';
 import { ArcadeCabinet } from './components/ArcadeCabinet';
+import { ArcadeHubModal } from './components/ArcadeHubModal';
 import {
   createPokemonModel,
   createTrainerAvatarModel,
@@ -719,8 +720,13 @@ export default function App() {
   });
 
   const [isArcadeActive, setIsArcadeActive] = useState(false);
+  const [isArcadeHubOpen, setIsArcadeHubOpen] = useState(false);
   const [activeArcadeMachine, setActiveArcadeMachine] = useState<ArcadeMachineInfo | null>(null);
   const arcadeActiveRef = useRef(false);
+  const isArcadeHubOpenRef = useRef(false);
+  useEffect(() => {
+    isArcadeHubOpenRef.current = isArcadeHubOpen;
+  }, [isArcadeHubOpen]);
   const activeArcadeMachineRef = useRef<ArcadeMachineInfo | null>(null);
   const enterArcadeModeRef = useRef<(machine?: ArcadeMachineInfo) => void>(() => {});
   const exitArcadeModeRef = useRef<() => void>(() => {});
@@ -2490,7 +2496,8 @@ export default function App() {
       (position, radius = 0.48, height = 1.75) => collisionSystem.canOccupy(position, radius, height),
       (position, radius = 0.48, height = 1.75) => collisionSystem.canFlyOccupy(position, radius, height),
       (x, z, clearance = 0) => collisionSystem.isRoadSurfaceAt(x, z, clearance),
-      (x, z) => collisionSystem.isPedestrianSurfaceAt(x, z)
+      (x, z) => collisionSystem.isPedestrianSurfaceAt(x, z),
+      (position, radius = 0.55, height = 1.8) => collisionSystem.recoverPenetration(position, radius, height)
     );
     npcManager.setGroundForbiddenPredicate(isOpenRiverWater);
     npcManager.setAquaticSurfacePredicate(isRiverWaterColumn);
@@ -2933,6 +2940,7 @@ export default function App() {
             wheelSteers?: THREE.Object3D[];
             brakeLights?: THREE.Mesh[];
             reverseLights?: THREE.Mesh[];
+            headlights?: THREE.Mesh[];
           }
         | undefined;
       if (!nodes) return;
@@ -2958,6 +2966,14 @@ export default function App() {
         materials.forEach((material) => {
           if (material instanceof THREE.MeshStandardMaterial) {
             material.emissiveIntensity = THREE.MathUtils.damp(material.emissiveIntensity, reversing ? 2.7 : 0.16, 16, visualDt);
+          }
+        });
+      }
+      for (const lamp of nodes.headlights ?? []) {
+        const materials = Array.isArray(lamp.material) ? lamp.material : [lamp.material];
+        materials.forEach((material) => {
+          if (material instanceof THREE.MeshStandardMaterial) {
+            material.emissiveIntensity = THREE.MathUtils.damp(material.emissiveIntensity, 1.4, 16, visualDt);
           }
         });
       }
@@ -3053,10 +3069,10 @@ export default function App() {
         // Confirm both door-side pedestrian zones are usable. This prevents a car
         // from technically clearing the pylon while still trapping the player on exit.
         const side = new THREE.Vector3(Math.cos(bay.rotationY), 0, -Math.sin(bay.rotationY));
-        const leftExit = mesh.position.clone().addScaledVector(side, -3.15);
-        const rightExit = mesh.position.clone().addScaledVector(side, 3.15);
-        const leftSafe = collisionSystem.findSafePositionOnLevel(leftExit, 0.72, 2.0, 0.9, 1.35);
-        const rightSafe = collisionSystem.findSafePositionOnLevel(rightExit, 0.72, 2.0, 0.9, 1.35);
+        const leftExit = mesh.position.clone().addScaledVector(side, -1.6);
+        const rightExit = mesh.position.clone().addScaledVector(side, 1.6);
+        const leftSafe = collisionSystem.findSafePositionOnLevel(leftExit, 0.5, 2.0, 0.9, 1.35);
+        const rightSafe = collisionSystem.findSafePositionOnLevel(rightExit, 0.5, 2.0, 0.9, 1.35);
         if (!leftSafe || !rightSafe) continue;
 
         finalBounds = bounds;
@@ -5438,8 +5454,8 @@ export default function App() {
       showTemporaryNotification(
         'Hero Garage Service',
         repaired > 0
-          ? `Service complete. ${repaired} hero car${repaired === 1 ? '' : 's'} repaired and ready to cause more problems.`
-          : 'All six hero cars are already in perfect condition.'
+          ? `Service complete. ${repaired} car${repaired === 1 ? '' : 's'} repaired and fully tuned.`
+          : 'All 6 garage cars are already in showroom condition and fully serviced.'
       );
     };
 
@@ -5559,7 +5575,7 @@ export default function App() {
       }
 
       playSoundEffect('fanfare');
-      const details: string[] = ['All six personal cars returned to their assigned garage bays.'];
+      const details: string[] = ['All 6 personal cars returned to their assigned garage bays.'];
       if (duplicatesRemoved > 0) details.push(`${duplicatesRemoved} accidental duplicate${duplicatesRemoved === 1 ? '' : 's'} removed.`);
       if (missingRestored > 0) details.push(`${missingRestored} missing car${missingRestored === 1 ? '' : 's'} restored.`);
       details.push('Damage, tuning and ownership settings were preserved.');
@@ -6066,7 +6082,7 @@ export default function App() {
             : landmark.id === 'goldenrod_radio_tower'
             ? 'Goldenrod Radio Tower. One of the city landmarks tracked by your World Goals.'
             : landmark.id === 'player_garage'
-            ? 'Your six-car hero garage. The blue terminal services your cars; the orange CAR RESET MACHINE returns all six to their assigned bays.'
+            ? 'Your 6-car hero garage. The blue terminal services all 6 cars; the orange CAR RESET MACHINE returns all 6 cars to their assigned bays.'
             : `You discovered ${landmark.name}.`
         );
         playSoundEffect('click');
@@ -6405,8 +6421,8 @@ export default function App() {
         const garageResetDistance = pos.distanceTo(goldenrod.playerGarage.resetPos);
         if (garageResetDistance < 3.4 || garageServiceDistance < 3.4) {
           setInteractionPrompt(garageResetDistance <= garageServiceDistance
-            ? '[E] CAR RESET MACHINE — return all six cars to their garage bays'
-            : '[E] Service all six hero cars');
+            ? '[E] CAR RESET MACHINE — return all 6 cars to their garage bays'
+            : '[E] Service all 6 garage cars');
           return;
         }
       }
@@ -7953,6 +7969,14 @@ export default function App() {
         }
         return;
       }
+      if (isArcadeHubOpenRef.current) {
+        if (!event.repeat && event.code === 'Escape') {
+          event.preventDefault();
+          isArcadeHubOpenRef.current = false;
+          setIsArcadeHubOpen(false);
+        }
+        return;
+      }
       if (!event.repeat && event.code === 'Escape') {
         event.preventDefault();
         togglePause();
@@ -8035,7 +8059,7 @@ export default function App() {
     let lastMouseY = 0;
     const onMouseDown = (event: MouseEvent) => {
       soundManager.unlock();
-      if (arcadeActiveRef.current || pauseRef.current || event.button !== 0) return;
+      if (arcadeActiveRef.current || isArcadeHubOpenRef.current || pauseRef.current || event.button !== 0) return;
       mouseDown = true;
       lastMouseX = event.clientX;
       lastMouseY = event.clientY;
@@ -8043,6 +8067,7 @@ export default function App() {
     const onMouseMove = (event: MouseEvent) => {
       if (
         arcadeActiveRef.current ||
+        isArcadeHubOpenRef.current ||
         !mouseDown ||
         pauseRef.current ||
         !engineRef.current ||
@@ -12264,7 +12289,13 @@ export default function App() {
           policePositions={policePositions}
           isMuted={isMuted}
           onToggleMute={handleToggleMute}
-          onEnterArcade={() => enterArcadeModeRef.current()}
+          onEnterArcade={() => {
+            if (mpState.isInRoom) {
+              showTemporaryNotification('Arcade Restricted', 'Arcade minigames are disabled during active multiplayer sessions.');
+              return;
+            }
+            setIsArcadeHubOpen(true);
+          }}
           onResetPlayer={handleResetPlayer}
           onRestartWorld={handleRestartWorld}
           onFastTravel={handleFastTravel}
@@ -12481,7 +12512,7 @@ export default function App() {
                       return;
                     }
                     handleResumeGame();
-                    enterArcadeModeRef.current();
+                    setIsArcadeHubOpen(true);
                   }}
                   onTouchEnd={(e) => {
                     if (mpState.isInRoom) {
@@ -12490,13 +12521,13 @@ export default function App() {
                     }
                     e.preventDefault();
                     handleResumeGame();
-                    enterArcadeModeRef.current();
+                    setIsArcadeHubOpen(true);
                   }}
                   className={`min-h-[44px] rounded-2xl border border-purple-400/60 bg-purple-500/15 px-4 sm:px-5 py-3 sm:py-4 text-left transition hover:bg-purple-500/25 active:bg-purple-500/35 cursor-pointer ${mpState.isInRoom ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
-                  <div className="font-black text-purple-200">🎮 Play Arcade Machine (Coin-Op)</div>
+                  <div className="font-black text-purple-200">🎮 Arcade Lounge & Games Hub</div>
                   <div className="mt-1 text-xs text-slate-400">
-                    {mpState.isInRoom ? 'Disabled during multiplayer to protect shared world state.' : 'Suspend main world and play the retro arcade machine.'}
+                    {mpState.isInRoom ? 'Disabled during multiplayer to protect shared world state.' : 'Browse all arcade machines on the map, fast travel or play instantly.'}
                   </div>
                 </button>
 
@@ -12708,6 +12739,40 @@ export default function App() {
           onLeaveRoom={handleLeaveMultiplayerRoom}
         />
       )}
+
+      <ArcadeHubModal
+        isOpen={isArcadeHubOpen}
+        onClose={() => {
+          isArcadeHubOpenRef.current = false;
+          setIsArcadeHubOpen(false);
+        }}
+        onPlayGame={(gameId, machineName) => {
+          isArcadeHubOpenRef.current = false;
+          setIsArcadeHubOpen(false);
+          const e = engineRef.current;
+          const pos = e ? e.playerMovement.position.clone() : new THREE.Vector3();
+          enterArcadeModeRef.current({
+            id: `arcade_hub_${gameId}`,
+            name: machineName ?? 'Arcade Machine',
+            position: pos,
+            gameId,
+          });
+        }}
+        onTeleportToLocation={(target) => {
+          isArcadeHubOpenRef.current = false;
+          setIsArcadeHubOpen(false);
+          handleFastTravel({
+            x: target.x,
+            z: target.z,
+            travelX: target.travelX,
+            travelZ: target.travelZ,
+            travelYaw: target.travelYaw,
+            name: target.name,
+          });
+          showTemporaryNotification('Arcade Warp', `Teleported to ${target.name}!`);
+        }}
+        playerPos={playerPos}
+      />
     </div>
   );
 }

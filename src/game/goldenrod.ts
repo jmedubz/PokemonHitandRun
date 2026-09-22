@@ -1526,8 +1526,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     // X=-104 used to put a 2.3m-wide train pylon partly inside the X=-110 outer
     // arterial. Shift only that support outside the road envelope while preserving
     // the elevated track spacing everywhere else.
-    // Skip the pylon at x=152 as it lands directly inside the player's 6-car garage.
-    if (x === 152) continue;
+    // The pylon at x=152 serves as the central support pillar through the player's 6-car garage.
     const pylonX = x === -104 ? -99 : x;
     const pylon = new THREE.Mesh(new THREE.BoxGeometry(2.3, 11.7, 2.3), createMaterial(0x78909c));
     pylon.name = `magnet_pylon_${x}`; pylon.position.set(pylonX, 5.85, railZ); markSolid(pylon); railServiceGroup.add(pylon);
@@ -2801,7 +2800,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
   });
 
   // -------------------------------------------------------------------------
-  // 12. PLAYER'S 5-CAR HERO GARAGE (GOLDENROD CITY, X = 150, Z = -110)
+  // 12. PLAYER'S 6-CAR HERO GARAGE (GOLDENROD CITY, X = 150, Z = -110)
   // -------------------------------------------------------------------------
   const garageGroup = new THREE.Group();
   garageGroup.name = 'player_hero_garage';
@@ -2843,19 +2842,21 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
 
   const carBays: { type: VehicleModelType; name: string; pos: THREE.Vector3; rotationY: number }[] = [];
   const heroCarConfigs: { type: VehicleModelType; name: string; xOffset: number }[] = [
-    { type: 'bmw_f80_m3', name: 'BMW F80 M3 (RWD)', xOffset: -16.5 },
-    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -10.1 },
-    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -3.7 },
-    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 2.7 },
-    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 9.1 },
-    { type: 'delorean_time_machine', name: 'DeLorean DMC-12 Time Machine (1.21 GW)', xOffset: 15.5 },
+    { type: 'bmw_f80_m3', name: 'BMW F80 M3 (RWD)', xOffset: -15.5 },
+    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -9.8 },
+    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -4.1 },
+    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 6.0 },
+    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 11.3 },
+    { type: 'delorean_time_machine', name: 'DeLorean DMC-12 Time Machine (1.21 GW)', xOffset: 16.6 },
   ];
 
   heroCarConfigs.forEach((hc) => {
+    // Narrowed parking spot width (3.9m total) ensures each car has clean margins
+    // and ample clearance around the central support pillar and outer walls
     const lineL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 10), roadYellowLineMat);
-    lineL.position.set(hc.xOffset - 2.5, 0.12, 0);
+    lineL.position.set(hc.xOffset - 1.95, 0.12, 0);
     const lineR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 10), roadYellowLineMat);
-    lineR.position.set(hc.xOffset + 2.5, 0.12, 0);
+    lineR.position.set(hc.xOffset + 1.95, 0.12, 0);
     garageGroup.add(lineL, lineR);
 
     const spot = new THREE.SpotLight(0xffffff, 1.8, 18, Math.PI / 4, 0.4);

@@ -2683,16 +2683,10 @@ function buildHeroCar(spec: HeroCarSpec): { mesh: THREE.Group; wheels: THREE.Mes
       break;
     }
     case 'delorean': {
-      const frontZ = spec.length / 2 + 0.02;
+      // Photorealistic DMC-12 Front Fascia (Bumper, Amber Lights, Chrome Trim, Quad Headlights, Slat Grille & DMC Badge)
+      buildDeLoreanFrontFascia(root, spec);
+
       const rearZ = -spec.length / 2 - 0.02;
-
-      // DMC Stainless Steel Front Nose & Dark Bumper Apron
-      const grille = makeFacePanel([[-0.88, 0.38], [0.88, 0.38], [0.84, 0.65], [-0.84, 0.65]], frontZ, vehicleMatteBlack(), 'dmc_front_grille', 0.08);
-      root.add(grille);
-
-      const bumper = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.16, 0.12), vehicleMatteBlack());
-      bumper.position.set(0, 0.35, frontZ + 0.02);
-      root.add(bumper);
 
       // DMC Louvers on rear window
       const louverGroup = new THREE.Group();
@@ -2834,18 +2828,439 @@ function createOutatimePlateTexture(): THREE.CanvasTexture {
 
 function createDmcEmblemTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 64;
+  canvas.width = 512;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(0, 0, 256, 64);
-    ctx.fillStyle = '#e2e8f0';
-    ctx.font = '900 38px Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('D M C', 128, 46);
+    // Deep satin black background matching the front grille slats
+    ctx.fillStyle = '#0e1014';
+    ctx.fillRect(0, 0, 512, 128);
+
+    // Subtle horizontal grille slat ribs across the background
+    for (let y = 8; y < 128; y += 12) {
+      ctx.fillStyle = '#181b22';
+      ctx.fillRect(0, y, 512, 4);
+      ctx.fillStyle = '#08090c';
+      ctx.fillRect(0, y + 4, 512, 2);
+    }
+
+    // Authentic DeLorean "dmc" logo geometry (matching the Giugiaro typography):
+    // Letter dimensions: height 54px (from Y=37 to Y=91)
+    // Width of letters: d=68px, m=86px, c=68px, spacing=18px
+    // Total width = 68 + 18 + 86 + 18 + 68 = 258px. Centered: startX = (512 - 258)/2 = 127.
+    const startX = 127;
+    const topY = 37;
+    const botY = 91;
+    const midY = 64;
+    const strokeW = 12;
+
+    const fillMetallic = () => {
+      const grad = ctx.createLinearGradient(0, topY, 0, botY);
+      grad.addColorStop(0, '#ffffff');
+      grad.addColorStop(0.35, '#f1f5f9');
+      grad.addColorStop(0.65, '#cbd5e1');
+      grad.addColorStop(1, '#94a3b8');
+      ctx.fillStyle = grad;
+      ctx.fill();
+    };
+
+    // Letter 'd': rounded outer contour on left, flat vertical spine on right
+    const dX = startX;
+    ctx.beginPath();
+    ctx.moveTo(dX + 68, topY);
+    ctx.lineTo(dX + 26, topY);
+    ctx.arc(dX + 26, midY, 27, -Math.PI / 2, Math.PI / 2, true);
+    ctx.lineTo(dX + 68, botY);
+    ctx.closePath();
+    // Inner punch-out
+    ctx.moveTo(dX + 68 - strokeW, topY + strokeW);
+    ctx.lineTo(dX + 68 - strokeW, botY - strokeW);
+    ctx.lineTo(dX + 26, botY - strokeW);
+    ctx.arc(dX + 26, midY, 27 - strokeW, Math.PI / 2, -Math.PI / 2, false);
+    ctx.lineTo(dX + 68 - strokeW, topY + strokeW);
+    ctx.closePath();
+    fillMetallic();
+
+    // Letter 'm': wide geometric M with central chevron
+    const mX = dX + 68 + 18;
+    const mW = 86;
+    ctx.beginPath();
+    ctx.moveTo(mX, botY);
+    ctx.lineTo(mX, topY);
+    ctx.lineTo(mX + strokeW, topY);
+    ctx.lineTo(mX + mW / 2, midY + 4);
+    ctx.lineTo(mX + mW - strokeW, topY);
+    ctx.lineTo(mX + mW, topY);
+    ctx.lineTo(mX + mW, botY);
+    ctx.lineTo(mX + mW - strokeW, botY);
+    ctx.lineTo(mX + mW - strokeW, topY + strokeW * 1.5);
+    ctx.lineTo(mX + mW / 2, midY + 4 + strokeW * 1.15);
+    ctx.lineTo(mX + strokeW, topY + strokeW * 1.5);
+    ctx.lineTo(mX + strokeW, botY);
+    ctx.closePath();
+    fillMetallic();
+
+    // Letter 'c': mirror of 'd' opening to the right
+    const cX = mX + mW + 18;
+    ctx.beginPath();
+    ctx.moveTo(cX, topY);
+    ctx.lineTo(cX + 42, topY);
+    ctx.arc(cX + 42, midY, 27, -Math.PI / 2, Math.PI / 2, false);
+    ctx.lineTo(cX, botY);
+    ctx.closePath();
+    // Inner punch-out
+    ctx.moveTo(cX + strokeW, topY + strokeW);
+    ctx.lineTo(cX + strokeW, botY - strokeW);
+    ctx.lineTo(cX + 42, botY - strokeW);
+    ctx.arc(cX + 42, midY, 27 - strokeW, Math.PI / 2, -Math.PI / 2, true);
+    ctx.lineTo(cX + strokeW, topY + strokeW);
+    ctx.closePath();
+    fillMetallic();
+
+    // Open mouth of the 'c' on right:
+    ctx.fillStyle = '#0e1014';
+    ctx.fillRect(cX + 38, midY - 9, 34, 18);
+
+    // Iconic horizontal black groove / split line across all letters:
+    ctx.fillStyle = '#0e1014';
+    ctx.fillRect(startX - 6, midY - 3, 270, 6);
+
+    // Subtle chrome border frame around badge plate
+    ctx.strokeStyle = 'rgba(241, 245, 249, 0.55)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(3, 3, 506, 122);
   }
   const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
   return tex;
+}
+
+function createDeLoreanHeadlightTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    // 1. Chrome parabolic reflector dish
+    const bgGrad = ctx.createRadialGradient(128, 128, 8, 128, 128, 135);
+    bgGrad.addColorStop(0, '#ffffff');
+    bgGrad.addColorStop(0.35, '#e2e8f0');
+    bgGrad.addColorStop(0.70, '#94a3b8');
+    bgGrad.addColorStop(1, '#334155');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Radial parabolic flutes
+    for (let i = 0; i < 24; i++) {
+      const angle = (i / 24) * Math.PI * 2;
+      ctx.strokeStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.4)' : 'rgba(15, 23, 42, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(128, 128);
+      ctx.lineTo(128 + Math.cos(angle) * 130, 128 + Math.sin(angle) * 130);
+      ctx.stroke();
+    }
+
+    // 2. Sealed-beam classic vertical prismatic fluting
+    for (let x = 12; x < 244; x += 10) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, 14);
+      ctx.lineTo(x, 242);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.35)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, 14);
+      ctx.lineTo(x + 2, 242);
+      ctx.stroke();
+    }
+
+    // 3. Central concentric Fresnel rings
+    [24, 48, 72, 96].forEach((r) => {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(128, 128, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(128, 128, r + 2, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // 4. Center halogen bulb filament capsule
+    const bulbGrad = ctx.createRadialGradient(128, 128, 2, 128, 128, 16);
+    bulbGrad.addColorStop(0, '#ffffff');
+    bulbGrad.addColorStop(0.5, '#fef08a');
+    bulbGrad.addColorStop(0.85, '#cbd5e1');
+    bulbGrad.addColorStop(1, '#334155');
+    ctx.fillStyle = bulbGrad;
+    ctx.beginPath();
+    ctx.arc(128, 128, 16, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // 5. Outer chrome retaining bezel
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, 248, 248);
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, 236, 236);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function createDeLoreanAmberLightTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    // 1. Rich automotive golden amber background
+    const bgGrad = ctx.createLinearGradient(0, 0, 0, 160);
+    bgGrad.addColorStop(0, '#f59e0b');
+    bgGrad.addColorStop(0.35, '#fbbf24');
+    bgGrad.addColorStop(0.70, '#d97706');
+    bgGrad.addColorStop(1, '#b45309');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 512, 160);
+
+    // 2. Retroreflective diamond prism micro-lattice
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(254, 243, 199, 0.28)';
+    for (let d = -160; d < 512 + 160; d += 12) {
+      ctx.beginPath();
+      ctx.moveTo(d, 0);
+      ctx.lineTo(d + 160, 160);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(d, 160);
+      ctx.lineTo(d + 160, 0);
+      ctx.stroke();
+    }
+
+    // 3. Dominant horizontal fluted optic ribs (as seen in photo)
+    for (let y = 10; y < 155; y += 10) {
+      ctx.strokeStyle = 'rgba(254, 240, 138, 0.65)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(8, y);
+      ctx.lineTo(504, y);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(120, 53, 15, 0.55)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(8, y + 3);
+      ctx.lineTo(504, y + 3);
+      ctx.stroke();
+    }
+
+    // 4. Dual internal bulb glow hot-spots
+    [160, 352].forEach((bulbX) => {
+      const bulbGlow = ctx.createRadialGradient(bulbX, 80, 4, bulbX, 80, 85);
+      bulbGlow.addColorStop(0, 'rgba(255, 255, 220, 0.85)');
+      bulbGlow.addColorStop(0.35, 'rgba(251, 191, 36, 0.60)');
+      bulbGlow.addColorStop(0.75, 'rgba(217, 119, 6, 0.20)');
+      bulbGlow.addColorStop(1, 'rgba(180, 83, 9, 0)');
+      ctx.fillStyle = bulbGlow;
+      ctx.beginPath();
+      ctx.arc(bulbX, 80, 85, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // 5. Dark recessed border
+    ctx.strokeStyle = '#18191c';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, 506, 154);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(7, 7, 498, 146);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function createDeLoreanGrilleTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#101216';
+    ctx.fillRect(0, 0, 512, 128);
+
+    for (let y = 6; y < 128; y += 14) {
+      ctx.fillStyle = '#2b3038';
+      ctx.fillRect(0, y, 512, 3);
+      ctx.fillStyle = '#16181e';
+      ctx.fillRect(0, y + 3, 512, 5);
+      ctx.fillStyle = '#050608';
+      ctx.fillRect(0, y + 8, 512, 6);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function buildDeLoreanFrontFascia(root: THREE.Group, spec: HeroCarSpec): void {
+  const frontZ = spec.length / 2 + 0.02;
+  const bumperMat = new THREE.MeshStandardMaterial({
+    color: 0x181a1e,
+    roughness: 0.84,
+    metalness: 0.12,
+  });
+  const chromeMat = vehicleChrome();
+  const matteBlack = vehicleMatteBlack();
+
+  // 1. Dark Charcoal Polyurethane Front Bumper
+  const bumper = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.165, 0.16), bumperMat);
+  bumper.position.set(0, 0.365, frontZ + 0.04);
+  root.add(bumper);
+
+  // Side wrap-around corners of bumper
+  [-1, 1].forEach((side) => {
+    const corner = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.165, 0.24), bumperMat);
+    corner.position.set(side * 0.915, 0.365, frontZ - 0.07);
+    root.add(corner);
+
+    // Amber front side-marker reflector on fender corner
+    const sideMarker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.02, 0.046, 0.11),
+      new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        emissive: 0xd97706,
+        emissiveIntensity: 1.2,
+        roughness: 0.2,
+      })
+    );
+    sideMarker.position.set(side * 0.958, 0.44, frontZ - 0.09);
+    root.add(sideMarker);
+  });
+
+  // 2. The Yellow — Wide Rectangular Amber Turn Signal & Parking Lamps in the Bumper
+  const amberTex = createDeLoreanAmberLightTexture();
+  const amberMat = new THREE.MeshStandardMaterial({
+    map: amberTex,
+    color: 0xffaa00,
+    emissive: 0xd97706,
+    emissiveIntensity: 1.3,
+    roughness: 0.15,
+    metalness: 0.2,
+  });
+
+  [-1, 1].forEach((side) => {
+    // Recessed dark bezel inside bumper
+    const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.108, 0.025), matteBlack);
+    bezel.position.set(side * 0.60, 0.365, frontZ + 0.055);
+
+    // The Amber lens itself
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.090, 0.020), amberMat);
+    lamp.position.set(side * 0.60, 0.365, frontZ + 0.066);
+    root.add(bezel, lamp);
+  });
+
+  // 3. Bright Silver / Chrome Beltline Trim Strip right above the bumper
+  const beltline = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.018, 0.045), chromeMat);
+  beltline.position.set(0, 0.450, frontZ + 0.045);
+  root.add(beltline);
+
+  // 4. Upper Fascia Backing & Hood Leading Trim
+  const fasciaBack = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.165, 0.08), matteBlack);
+  fasciaBack.position.set(0, 0.530, frontZ + 0.015);
+  root.add(fasciaBack);
+
+  const hoodTrim = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.016, 0.04), chromeMat);
+  hoodTrim.position.set(0, 0.615, frontZ + 0.02);
+  root.add(hoodTrim);
+
+  // 5. Center Horizontal Slat Grille
+  const grilleTex = createDeLoreanGrilleTexture();
+  const grilleMat = new THREE.MeshStandardMaterial({ map: grilleTex, roughness: 0.78, metalness: 0.2 });
+  const grilleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.152, 0.028), grilleMat);
+  grilleMesh.position.set(0, 0.530, frontZ + 0.030);
+  root.add(grilleMesh);
+
+  // 3D Horizontal Slats for authentic depth
+  for (let i = -3; i <= 3; i++) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.007, 0.022), matteBlack);
+    slat.position.set(0, 0.530 + i * 0.020, frontZ + 0.042);
+    root.add(slat);
+  }
+
+  // 6. The Iconic DMC Badge in the exact center of the grille
+  const badgeTex = createDmcEmblemTexture();
+  const badgeMat = new THREE.MeshStandardMaterial({
+    map: badgeTex,
+    roughness: 0.18,
+    metalness: 0.85,
+  });
+  const badgeMesh = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.076, 0.018), badgeMat);
+  badgeMesh.position.set(0, 0.530, frontZ + 0.052);
+
+  const badgeBezel = new THREE.Mesh(new THREE.BoxGeometry(0.286, 0.082, 0.012), chromeMat);
+  badgeBezel.position.set(0, 0.530, frontZ + 0.048);
+  root.add(badgeBezel, badgeMesh);
+
+  // 7. Quad Sealed-Beam Headlights (2 on Left, 2 on Right)
+  const headlightTex = createDeLoreanHeadlightTexture();
+  const headlightMat = new THREE.MeshStandardMaterial({
+    map: headlightTex,
+    color: 0xffffff,
+    emissive: 0xf0f8ff,
+    emissiveIntensity: 1.15,
+    roughness: 0.08,
+    metalness: 0.25,
+  });
+
+  [-1, 1].forEach((side) => {
+    [0.49, 0.71].forEach((xOff) => {
+      // Individual chrome bezel frame
+      const bezel = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.144, 0.025), chromeMat);
+      bezel.position.set(side * xOff, 0.530, frontZ + 0.035);
+
+      // Sealed-beam fluted glass lamp
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.130, 0.018), headlightMat);
+      lamp.position.set(side * xOff, 0.530, frontZ + 0.046);
+      lamp.userData.lightRole = 'headlight';
+      lamp.name = 'headlight_lens';
+      root.add(bezel, lamp);
+    });
+  });
+
+  // 8. Lower Air Dam Spoiler, Center Intake Mesh & Offset License Plate Bracket
+  const airDam = new THREE.Mesh(new THREE.BoxGeometry(1.78, 0.095, 0.16), matteBlack);
+  airDam.position.set(0, 0.245, frontZ + 0.01);
+  root.add(airDam);
+
+  const lowerIntake = new THREE.Mesh(
+    new THREE.BoxGeometry(0.88, 0.065, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0x090a0c, roughness: 0.95 })
+  );
+  lowerIntake.position.set(0, 0.245, frontZ + 0.035);
+  root.add(lowerIntake);
+
+  const plateBracket = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.078, 0.012),
+    new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.75, roughness: 0.35 })
+  );
+  plateBracket.position.set(0.32, 0.235, frontZ + 0.048);
+  root.add(plateBracket);
 }
 
 function createTimeCircuitsTexture(): THREE.CanvasTexture {
@@ -2973,49 +3388,7 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
     }
   });
 
-  // 1. DMC Front Grille, Badge, Quad Headlights & Volumetric Beam Cones
-  const grilleGroup = new THREE.Group();
-  grilleGroup.name = 'delorean_dmc_grille';
-  const grilleBg = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.22, 0.06), blackPlastics);
-  grilleBg.position.set(0, 0.52, 2.12);
-  grilleGroup.add(grilleBg);
-
-  const dmcBadge = new THREE.Mesh(
-    new THREE.BoxGeometry(0.32, 0.09, 0.08),
-    new THREE.MeshStandardMaterial({ map: createDmcEmblemTexture(), metalness: 0.8, roughness: 0.2 })
-  );
-  dmcBadge.position.set(0, 0.52, 2.15);
-  grilleGroup.add(dmcBadge);
-
-  [-1, 1].forEach((side) => {
-    [0.48, 0.72].forEach((xOff) => {
-      const headlight = new THREE.Mesh(
-        new THREE.BoxGeometry(0.18, 0.13, 0.05),
-        new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          emissive: 0xf0f9ff,
-          emissiveIntensity: 2.5,
-          roughness: 0.02,
-        })
-      );
-      headlight.position.set(side * xOff, 0.52, 2.15);
-      grilleGroup.add(headlight);
-    });
-
-    const blinker = new THREE.Mesh(
-      new THREE.BoxGeometry(0.28, 0.07, 0.04),
-      new THREE.MeshStandardMaterial({
-        color: 0xf59e0b,
-        emissive: 0xd97706,
-        emissiveIntensity: 1.5,
-      })
-    );
-    blinker.position.set(side * 0.62, 0.34, 2.12);
-    grilleGroup.add(blinker);
-  });
-  root.add(grilleGroup);
-
-  // 2. OUTATIME License Plate on Rear Bumper
+  // 1. OUTATIME License Plate on Rear Bumper
   const plateTex = createOutatimePlateTexture();
   const licensePlate = new THREE.Mesh(
     new THREE.PlaneGeometry(0.38, 0.19),
@@ -3025,7 +3398,7 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
   licensePlate.rotation.y = Math.PI;
   root.add(licensePlate);
 
-  // 3. Exterior Time Machine Blue Conduit Cables & Flux Coils
+  // 2. Exterior Time Machine Blue Conduit Cables & Flux Coils
   const conduits = new THREE.Group();
   conduits.name = 'delorean_flux_conduits';
 
@@ -3046,9 +3419,9 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
     conduits.add(rearArch);
   });
 
-  const frontCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.76, 10), neonCyanFlux);
+  const frontCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 1.76, 10), neonCyanFlux);
   frontCoil.rotation.z = Math.PI / 2;
-  frontCoil.position.set(0, 0.36, 2.08);
+  frontCoil.position.set(0, 0.26, 2.16);
   conduits.add(frontCoil);
 
   const rearCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.76, 10), neonCyanFlux);
@@ -3107,6 +3480,8 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
   );
   timeCircuitsDash.position.set(0, 0.78, 0.45);
   root.add(timeCircuitsDash);
+
+  collectVehicleVisualNodes(root);
 
   return car;
 }

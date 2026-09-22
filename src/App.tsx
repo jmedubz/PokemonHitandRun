@@ -617,7 +617,7 @@ export default function App() {
   const [interactionPrompt, setInteractionPrompt] = useState<string | null>(null);
   const [activeDialogue, setActiveDialogue] = useState<{ speaker: string; text: string } | null>(null);
   const [starterSelectionCandidate, setStarterSelectionCandidate] = useState<{ id: PokemonCharacterId; name: string } | null>(null);
-  const [temporaryNotification, setTemporaryNotification] = useState<{ id: number; speaker: string; text: string } | null>(null);
+  const [temporaryNotification, setTemporaryNotification] = useState<{ id: number; speaker: string; text: string; duration?: number } | null>(null);
   const [unlockedGeodude, setUnlockedGeodude] = useState(false);
   const [treesGrownCount, setTreesGrownCount] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
@@ -760,14 +760,15 @@ export default function App() {
     if (temporaryNotificationTimerRef.current !== null) {
       window.clearTimeout(temporaryNotificationTimerRef.current);
     }
-    setTemporaryNotification({ id, speaker, text });
+    const durationMs = 6000;
+    setTemporaryNotification({ id, speaker, text, duration: durationMs });
     temporaryNotificationTimerRef.current = window.setTimeout(() => {
       // Guard against an older timeout ever closing a newer replacement message.
       setTemporaryNotification((current) => (current?.id === id ? null : current));
       if (temporaryNotificationSequenceRef.current === id) {
         temporaryNotificationTimerRef.current = null;
       }
-    }, 6000);
+    }, durationMs);
   };
 
   const dismissActiveDialogue = () => {

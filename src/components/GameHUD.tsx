@@ -110,7 +110,7 @@ interface GameHUDProps {
   starterSelectionCandidate: { id: PokemonCharacterId; name: string } | null;
   onConfirmStarterSelection: () => void;
   onCancelStarterSelection: () => void;
-  temporaryNotification: { id: number; speaker: string; text: string } | null;
+  temporaryNotification: { id: number; speaker: string; text: string; duration?: number } | null;
   onDismissTemporaryNotification: () => void;
   ashBattleState: AshBattleState;
   showAshVictory: boolean;
@@ -1366,10 +1366,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         </div>
       )}
 
-      {/* ---------------- SIX-SECOND TEMPORARY NOTIFICATION LANE ---------------- */}
+      {/* ---------------- COMPACT TOP TEMPORARY NOTIFICATION LANE ---------------- */}
       {temporaryNotification && (
         <div
-          className="fixed top-14 left-1/2 -translate-x-1/2 z-[160] pointer-events-auto flex justify-center w-[94vw] max-w-md px-2"
+          className="fixed top-1 sm:top-1.5 left-1/2 -translate-x-1/2 z-[160] pointer-events-auto flex justify-center w-auto max-w-[90vw] sm:max-w-md px-1"
         >
           <button
             key={temporaryNotification.id}
@@ -1383,21 +1383,23 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               e.stopPropagation();
               onDismissTemporaryNotification();
             }}
-            className="hud-temporary-notification group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-cyan-400/90 rounded-2xl px-5 py-3.5 shadow-[0_0_30px_rgba(34,211,238,0.55)] backdrop-blur-2xl text-white cursor-pointer hover:border-cyan-300 active:scale-[0.98] transition overflow-hidden text-center"
-            title="Tap / Click to close message"
+            className="hud-temporary-notification group relative pointer-events-auto w-auto min-w-[210px] max-w-full bg-slate-950/95 border border-cyan-400/85 rounded-xl px-3 py-1.5 shadow-[0_0_18px_rgba(34,211,238,0.45)] backdrop-blur-md text-white cursor-pointer hover:border-cyan-300 active:scale-[0.98] transition overflow-hidden text-center flex flex-col items-center justify-center"
+            title="Tap to close"
             aria-label={`Close notification from ${temporaryNotification.speaker}`}
           >
-            <X className="absolute top-2.5 right-2.5 w-5 h-5 text-cyan-300 group-hover:text-white transition" />
-            <div className="text-[11px] uppercase tracking-wider font-black text-cyan-300 mb-0.5 text-center">
-              {temporaryNotification.speaker}
+            <X className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-cyan-400/80 group-hover:text-white transition" />
+            <div className="flex items-center justify-center gap-1.5 pr-4 pl-1 flex-wrap text-center">
+              <span className="text-[9.5px] sm:text-[10px] uppercase tracking-wider font-black text-cyan-300 shrink-0">
+                {temporaryNotification.speaker}:
+              </span>
+              <span className="text-[10.5px] sm:text-xs font-semibold text-slate-100 leading-snug">
+                {temporaryNotification.text}
+              </span>
             </div>
-            <div className="text-xs sm:text-sm font-semibold leading-snug text-slate-100 break-words text-center">
-              {temporaryNotification.text}
-            </div>
-            <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-cyan-300/80 group-hover:text-cyan-200 transition">
-              Tap message to dismiss
-            </div>
-            <div className="hud-notification-life absolute bottom-0 left-0 h-[2.5px] bg-cyan-300/90" />
+            <div
+              className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-cyan-400/90"
+              style={{ animationDuration: `${temporaryNotification.duration ?? 6000}ms` }}
+            />
           </button>
         </div>
       )}

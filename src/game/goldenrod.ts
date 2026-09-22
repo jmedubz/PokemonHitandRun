@@ -1526,6 +1526,8 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     // X=-104 used to put a 2.3m-wide train pylon partly inside the X=-110 outer
     // arterial. Shift only that support outside the road envelope while preserving
     // the elevated track spacing everywhere else.
+    // Skip the pylon at x=152 as it lands directly inside the player's 6-car garage.
+    if (x === 152) continue;
     const pylonX = x === -104 ? -99 : x;
     const pylon = new THREE.Mesh(new THREE.BoxGeometry(2.3, 11.7, 2.3), createMaterial(0x78909c));
     pylon.name = `magnet_pylon_${x}`; pylon.position.set(pylonX, 5.85, railZ); markSolid(pylon); railServiceGroup.add(pylon);
@@ -2841,19 +2843,19 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
 
   const carBays: { type: VehicleModelType; name: string; pos: THREE.Vector3; rotationY: number }[] = [];
   const heroCarConfigs: { type: VehicleModelType; name: string; xOffset: number }[] = [
-    { type: 'bmw_f80_m3', name: 'BMW F80 M3 (RWD)', xOffset: -16 },
-    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -9.8 },
-    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -3.6 },
-    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 2.6 },
-    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 8.8 },
-    { type: 'delorean_time_machine', name: 'DeLorean DMC-12 Time Machine (1.21 GW)', xOffset: 15 },
+    { type: 'bmw_f80_m3', name: 'BMW F80 M3 (RWD)', xOffset: -16.5 },
+    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -10.1 },
+    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -3.7 },
+    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 2.7 },
+    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 9.1 },
+    { type: 'delorean_time_machine', name: 'DeLorean DMC-12 Time Machine (1.21 GW)', xOffset: 15.5 },
   ];
 
   heroCarConfigs.forEach((hc) => {
     const lineL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 10), roadYellowLineMat);
-    lineL.position.set(hc.xOffset - 3.4, 0.12, 0);
+    lineL.position.set(hc.xOffset - 2.5, 0.12, 0);
     const lineR = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.22, 10), roadYellowLineMat);
-    lineR.position.set(hc.xOffset + 3.4, 0.12, 0);
+    lineR.position.set(hc.xOffset + 2.5, 0.12, 0);
     garageGroup.add(lineL, lineR);
 
     const spot = new THREE.SpotLight(0xffffff, 1.8, 18, Math.PI / 4, 0.4);
@@ -2871,7 +2873,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     });
   });
 
-  // Interactive hero-garage service terminal. This gives the five special cars a
+  // Interactive hero-garage service terminal. This gives the six special cars a
   // useful home-base function instead of the garage being only decorative.
   const serviceConsole = new THREE.Group();
   serviceConsole.name = 'hero_garage_service_console';
@@ -2936,7 +2938,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     resetLabelCtx.fillText('CAR RESET', 256, 92);
     resetLabelCtx.fillStyle = '#ffb347';
     resetLabelCtx.font = 'bold 32px sans-serif';
-    resetLabelCtx.fillText('ALL 5 GARAGE CARS', 256, 157);
+    resetLabelCtx.fillText('ALL 6 GARAGE CARS', 256, 157);
   }
   const resetLabelTexture = new THREE.CanvasTexture(resetLabelCanvas);
   resetLabelTexture.colorSpace = THREE.SRGBColorSpace;
@@ -2975,7 +2977,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
   root.add(garageGroup);
   landmarks.push({
     id: 'player_garage',
-    name: 'Player House & Hero Garage (5 Cars)',
+    name: 'Player House & Hero Garage (6 Cars)',
     category: 'player_garage',
     x: 150,
     z: -110,
@@ -3986,7 +3988,7 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
     groves: [
       { minX: 120, maxX: 154, minZ: 104, maxZ: 138, count: 4 },
       { minX: 262, maxX: 298, minZ: 104, maxZ: 140, count: 5 },
-      { minX: 120, maxX: 150, minZ: -140, maxZ: -108, count: 3 },
+      { minX: 105, maxX: 126, minZ: -140, maxZ: -108, count: 3 },
       { minX: 270, maxX: 300, minZ: -136, maxZ: -106, count: 3 },
     ],
   });

@@ -5439,7 +5439,7 @@ export default function App() {
         'Hero Garage Service',
         repaired > 0
           ? `Service complete. ${repaired} hero car${repaired === 1 ? '' : 's'} repaired and ready to cause more problems.`
-          : 'All five hero cars are already in perfect condition.'
+          : 'All six hero cars are already in perfect condition.'
       );
     };
 
@@ -5475,7 +5475,7 @@ export default function App() {
         let vehicle = matches.find((candidate) => candidate.id === expectedId) ?? matches[0];
 
         // If a hero car somehow disappeared entirely, recreate only that missing
-        // model so the machine still fulfils its promise to restore all five bays.
+        // model so the machine still fulfils its promise to restore all six bays.
         if (!vehicle) {
           const factory = heroFactories[bay.type];
           if (!factory) return;
@@ -5548,7 +5548,7 @@ export default function App() {
       });
 
       // Remove only accidental duplicate hero-car instances. Traffic vehicles and
-      // the five canonical owned cars are untouched.
+      // the six canonical owned cars are untouched.
       for (let i = e.vehicles.length - 1; i >= 0; i--) {
         const vehicle = e.vehicles[i];
         if (!vehicle.isHeroCar || canonicalCars.has(vehicle)) continue;
@@ -5559,7 +5559,7 @@ export default function App() {
       }
 
       playSoundEffect('fanfare');
-      const details: string[] = ['All five personal cars returned to their assigned garage bays.'];
+      const details: string[] = ['All six personal cars returned to their assigned garage bays.'];
       if (duplicatesRemoved > 0) details.push(`${duplicatesRemoved} accidental duplicate${duplicatesRemoved === 1 ? '' : 's'} removed.`);
       if (missingRestored > 0) details.push(`${missingRestored} missing car${missingRestored === 1 ? '' : 's'} restored.`);
       details.push('Damage, tuning and ownership settings were preserved.');
@@ -6066,7 +6066,7 @@ export default function App() {
             : landmark.id === 'goldenrod_radio_tower'
             ? 'Goldenrod Radio Tower. One of the city landmarks tracked by your World Goals.'
             : landmark.id === 'player_garage'
-            ? 'Your five-car hero garage. The blue terminal services your cars; the orange CAR RESET MACHINE returns all five to their assigned bays.'
+            ? 'Your six-car hero garage. The blue terminal services your cars; the orange CAR RESET MACHINE returns all six to their assigned bays.'
             : `You discovered ${landmark.name}.`
         );
         playSoundEffect('click');
@@ -6405,8 +6405,8 @@ export default function App() {
         const garageResetDistance = pos.distanceTo(goldenrod.playerGarage.resetPos);
         if (garageResetDistance < 3.4 || garageServiceDistance < 3.4) {
           setInteractionPrompt(garageResetDistance <= garageServiceDistance
-            ? '[E] CAR RESET MACHINE — return all five cars to their garage bays'
-            : '[E] Service all five hero cars');
+            ? '[E] CAR RESET MACHINE — return all six cars to their garage bays'
+            : '[E] Service all six hero cars');
           return;
         }
       }

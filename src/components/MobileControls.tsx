@@ -976,6 +976,30 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               <span className="text-[9px] font-black text-white">{Math.round(pokemonHp)}%</span>
             </div>
 
+            {/* Vehicle Damage Bar (shown under HP bar when in vehicle or aircraft) */}
+            {(inVehicle || currentVehicle || aircraft) && (() => {
+              const dmg = currentVehicle?.damage ?? aircraft?.damage ?? 0;
+              return (
+                <div className="flex items-center gap-1.5 bg-slate-950/80 border border-amber-400/40 rounded-full px-2.5 py-1 backdrop-blur-md shadow-md">
+                  <span className="text-[10px] font-black text-amber-400 flex items-center gap-1">
+                    <Car className="w-3 h-3 text-amber-400" />
+                    <span className="text-[8px] tracking-tight">DMG</span>
+                  </span>
+                  <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div
+                      className={`h-full rounded-full transition-all duration-200 ${
+                        dmg >= 75 ? 'bg-red-500 animate-pulse' : dmg >= 40 ? 'bg-amber-400' : 'bg-emerald-400'
+                      }`}
+                      style={{ width: `${Math.max(5, Math.min(100, dmg))}%` }}
+                    />
+                  </div>
+                  <span className={`text-[9px] font-black ${dmg >= 75 ? 'text-red-400' : 'text-white'}`}>
+                    {Math.round(dmg)}%
+                  </span>
+                </div>
+              );
+            })()}
+
             {/* Water / Special Bar (if Poliwag) */}
             {currentPokemonId === 'poliway' && (
               <div className="flex items-center gap-1.5 bg-slate-950/80 border border-sky-400/40 rounded-full px-2.5 py-1 backdrop-blur-md shadow-md">

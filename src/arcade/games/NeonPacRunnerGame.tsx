@@ -708,23 +708,23 @@ export const NeonPacRunnerGame: React.FC<ArcadeGameProps> = ({ onExit, machineNa
   return (
     <div className="w-full h-full flex flex-col bg-neutral-950 text-white font-mono select-none overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-yellow-950 via-neutral-900 to-indigo-950 border-b-2 border-yellow-500/70 px-3 sm:px-6 py-2 flex items-center justify-between shadow-lg shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Sparkles className="w-5 h-5 text-yellow-400 animate-spin" />
-          <div>
-            <h1 className="text-sm sm:text-lg font-black text-yellow-300 tracking-wider">
-              NEON PAC-RUNNER <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-600/30 text-yellow-200 border border-yellow-500/50">8-BIT</span>
+      <div className="bg-gradient-to-r from-yellow-950 via-neutral-900 to-indigo-950 border-b border-yellow-500/70 px-2 py-1 sm:px-4 sm:py-1.5 flex items-center justify-between shadow-md shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 truncate">
+          <Sparkles className="w-4 h-4 text-yellow-400 animate-spin shrink-0" />
+          <div className="truncate">
+            <h1 className="text-xs sm:text-sm font-black text-yellow-300 tracking-wider flex items-center gap-1.5 truncate">
+              PAC-RUNNER <span className="hidden xs:inline text-[9px] px-1 py-0.2 rounded bg-yellow-600/30 text-yellow-200 border border-yellow-500/50">8-BIT</span>
             </h1>
-            <p className="text-[10px] text-neutral-400">Stage {level} • Maze Chase</p>
+            <p className="hidden sm:inline-block text-[10px] text-neutral-400">Stage {level}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4 text-xs">
-          <div className="hidden sm:inline text-neutral-300">
-            HI: <span className="text-amber-400 font-bold">{highScore}</span>
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs shrink-0">
+          <div className="hidden sm:inline text-[11px] text-neutral-300">
+            HI:<span className="text-amber-400 font-bold ml-0.5">{highScore}</span>
           </div>
-          <div className="text-neutral-200">
-            SCORE: <span className="text-yellow-400 font-black">{score}</span>
+          <div className="text-[11px] text-neutral-200">
+            PTS:<span className="text-yellow-400 font-black ml-0.5">{score}</span>
           </div>
 
           <button
@@ -733,10 +733,10 @@ export const NeonPacRunnerGame: React.FC<ArcadeGameProps> = ({ onExit, machineNa
               e.stopPropagation();
               setSoundMuted((prev) => !prev);
             }}
-            className="p-1.5 min-h-[38px] min-w-[38px] rounded-lg bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 text-neutral-300 transition cursor-pointer touch-manipulation select-none flex items-center justify-center"
+            className="h-7 sm:h-8 w-7 sm:w-8 rounded-lg bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 text-neutral-300 transition cursor-pointer touch-manipulation select-none flex items-center justify-center"
             title="Toggle Sound"
           >
-            {soundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-yellow-400" />}
+            {soundMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-400" /> : <Volume2 className="w-3.5 h-3.5 text-yellow-400" />}
           </button>
 
           <button
@@ -745,7 +745,7 @@ export const NeonPacRunnerGame: React.FC<ArcadeGameProps> = ({ onExit, machineNa
               e.stopPropagation();
               setIsPaused((prev) => !prev);
             }}
-            className="px-2.5 py-1.5 min-h-[38px] rounded-xl bg-purple-900/80 hover:bg-purple-800 active:bg-purple-700 text-purple-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-purple-500/40 touch-manipulation select-none"
+            className="h-7 sm:h-8 px-2 rounded-lg bg-purple-900/80 hover:bg-purple-800 active:bg-purple-700 text-purple-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-purple-500/40 touch-manipulation select-none"
             title="Pause / Resume Game"
           >
             {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />}
@@ -759,7 +759,7 @@ export const NeonPacRunnerGame: React.FC<ArcadeGameProps> = ({ onExit, machineNa
               setIsPaused(false);
               resetGameRef.current();
             }}
-            className="px-2.5 py-1.5 min-h-[38px] rounded-xl bg-yellow-800 hover:bg-yellow-700 active:bg-yellow-600 text-xs font-bold transition flex items-center gap-1 cursor-pointer touch-manipulation select-none"
+            className="h-7 sm:h-8 px-2 rounded-lg bg-yellow-800 hover:bg-yellow-700 active:bg-yellow-600 text-xs font-bold transition flex items-center gap-1 cursor-pointer touch-manipulation select-none"
             title="Reset Game"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -772,10 +772,10 @@ export const NeonPacRunnerGame: React.FC<ArcadeGameProps> = ({ onExit, machineNa
               e.stopPropagation();
               onExit();
             }}
-            className="min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-black text-xs transition shadow flex items-center gap-1 cursor-pointer touch-manipulation select-none"
+            className="h-7 sm:h-8 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-black text-xs transition shadow flex items-center gap-1 cursor-pointer touch-manipulation select-none"
             title="Exit Cabinet"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
             <span>Exit</span>
           </button>
         </div>

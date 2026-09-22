@@ -1112,10 +1112,19 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               <div className="rounded-xl border border-amber-400/50 bg-slate-950/80 px-3 py-1.5 text-center backdrop-blur-md shadow-lg">
                 <div className="text-[9px] font-black uppercase tracking-widest text-amber-300">{currentVehicle.name}</div>
                 <div className="flex items-center gap-3 mt-0.5">
-                  <div>
-                    <span className="text-sm font-black text-white">{Math.round(Math.abs(currentVehicle.speed))}</span>
-                    <span className="text-[8px] text-slate-400 ml-0.5">km/h</span>
-                  </div>
+                  {(() => {
+                    const isDeLorean = currentVehicle.type === 'delorean_time_machine' || currentVehicle.type === 'delorean' || (currentVehicle.name && currentVehicle.name.toLowerCase().includes('delorean'));
+                    const speedVal = isDeLorean
+                      ? Math.round(Math.abs(currentVehicle.speed * 2.237))
+                      : Math.round(Math.abs(currentVehicle.speed));
+                    const speedUnit = isDeLorean ? 'mph' : 'km/h';
+                    return (
+                      <div>
+                        <span className={`text-sm font-black ${isDeLorean ? 'text-cyan-300' : 'text-white'}`}>{speedVal}</span>
+                        <span className={`text-[8px] ml-0.5 font-bold ${isDeLorean ? 'text-cyan-400 uppercase' : 'text-slate-400'}`}>{speedUnit}</span>
+                      </div>
+                    );
+                  })()}
                   {currentVehicle.gear && (
                     <div>
                       <span className="text-sm font-black text-amber-400">{currentVehicle.gear}</span>

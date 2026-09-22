@@ -1792,7 +1792,7 @@ interface HeroCarSpec {
   rearSideWindow?: CarPoint[];
   twoDoor?: boolean;
   carbonRoof?: boolean;
-  bodyStyle: 'f80' | 'g80' | 'f90' | 'aventador' | 'f12';
+  bodyStyle: 'f80' | 'g80' | 'f90' | 'aventador' | 'f12' | 'delorean';
 }
 
 function vehiclePaint(color: number): THREE.MeshPhysicalMaterial {
@@ -2682,6 +2682,44 @@ function buildHeroCar(spec: HeroCarSpec): { mesh: THREE.Group; wheels: THREE.Mes
       addReverseLight(root, 0, 0.52, rearZ - 0.06);
       break;
     }
+    case 'delorean': {
+      const frontZ = spec.length / 2 + 0.02;
+      const rearZ = -spec.length / 2 - 0.02;
+
+      // DMC Stainless Steel Front Nose & Dark Bumper Apron
+      const grille = makeFacePanel([[-0.88, 0.38], [0.88, 0.38], [0.84, 0.65], [-0.84, 0.65]], frontZ, vehicleMatteBlack(), 'dmc_front_grille', 0.08);
+      root.add(grille);
+
+      const bumper = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.16, 0.12), vehicleMatteBlack());
+      bumper.position.set(0, 0.35, frontZ + 0.02);
+      root.add(bumper);
+
+      // DMC Louvers on rear window
+      const louverGroup = new THREE.Group();
+      louverGroup.name = 'delorean_rear_louvers';
+      for (let i = 0; i < 7; i++) {
+        const zPos = -0.55 - i * 0.16;
+        const yPos = 0.98 - i * 0.045;
+        const louverSlat = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.02, 0.12), vehicleMatteBlack());
+        louverSlat.position.set(0, yPos, zPos);
+        louverSlat.rotation.x = -0.22;
+        louverGroup.add(louverSlat);
+      }
+      root.add(louverGroup);
+
+      // Dark Rubber Rear Bumper
+      const rearBumper = new THREE.Mesh(new THREE.BoxGeometry(1.80, 0.22, 0.14), vehicleMatteBlack());
+      rearBumper.position.set(0, 0.36, rearZ - 0.02);
+      root.add(rearBumper);
+
+      // Classic Tri-color Grid Tail Lights
+      for (const side of [-1, 1]) {
+        const tail = makeFacePanel([[side * 0.82, 0.52], [side * 0.25, 0.52], [side * 0.25, 0.72], [side * 0.82, 0.72]], rearZ - 0.06, vehicleLight(0x991111, 0xff2222, 1.2, true), 'brake_light', 0.02);
+        tail.userData.lightRole = 'brake';
+        root.add(tail);
+      }
+      break;
+    }
   }
 
   addSimplifiedHeroLOD(root, spec);
@@ -2764,10 +2802,129 @@ export function createFerrariF12Model(): { mesh: THREE.Group; wheels: THREE.Mesh
   });
 }
 
+// ----------------------------------------------------
+// BACK TO THE FUTURE REALISTIC TEXTURES & DETAIL HELPERS
+// ----------------------------------------------------
+function createOutatimePlateTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, 256, 128);
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(3, 3, 250, 122);
+    ctx.fillStyle = '#ea580c';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('CALIFORNIA', 128, 30);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.font = '900 42px "Courier New", monospace, sans-serif';
+    ctx.fillText('OUTATIME', 128, 80);
+    ctx.fillStyle = '#ef4444'; ctx.fillRect(16, 92, 32, 22);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px sans-serif'; ctx.fillText('AUG', 32, 108);
+    ctx.fillStyle = '#10b981'; ctx.fillRect(208, 92, 32, 22);
+    ctx.fillStyle = '#ffffff'; ctx.fillText('86', 224, 108);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function createDmcEmblemTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '900 38px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('D M C', 128, 46);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function createTimeCircuitsTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, 256, 128);
+    ctx.fillStyle = '#f43f5e';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('DESTINATION TIME', 10, 18);
+    ctx.font = 'bold 17px "Courier New", monospace';
+    ctx.fillText('OCT 26 1985 01:21', 10, 38);
+    ctx.fillStyle = '#22c55e';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('PRESENT TIME', 10, 58);
+    ctx.font = 'bold 17px "Courier New", monospace';
+    ctx.fillText('NOV 12 1955 06:38', 10, 78);
+    ctx.fillStyle = '#f59e0b';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('LAST TIME DEPARTED', 10, 98);
+    ctx.font = 'bold 17px "Courier New", monospace';
+    ctx.fillText('NOV 05 1955 01:21', 10, 118);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function createMrFusionLogoTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillStyle = '#16a34a';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('MR. FUSION', 64, 45);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('HOME ENERGY', 64, 65);
+    ctx.fillText('REACTOR', 64, 80);
+    ctx.beginPath(); ctx.arc(64, 100, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = '#16a34a'; ctx.lineWidth = 3; ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+function createHoverboardTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#ec4899';
+    ctx.fillRect(0, 0, 128, 256);
+    ctx.strokeStyle = '#facc15';
+    ctx.lineWidth = 8;
+    for (let i = -128; i < 384; i += 32) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + 128, 256); ctx.stroke();
+    }
+    ctx.fillStyle = '#1e1b4b';
+    ctx.fillRect(16, 96, 96, 64);
+    ctx.fillStyle = '#facc15';
+    ctx.font = '900 16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('HOVER', 64, 122);
+    ctx.fillText('BOARD', 64, 146);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
 // 6. Photorealistic DeLorean DMC-12 Time Machine (Back to the Future 1.21 GW Edition)
 export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: THREE.Mesh[] } {
   const car = buildHeroCar({
-    id: 'delorean_time_machine', bodyStyle: 'aventador', color: 0xd2d7df,
+    id: 'delorean_time_machine', bodyStyle: 'delorean', color: 0xd4d8e0,
     length: 4.27, width: 1.85, height: 1.14,
     frontAxleZ: 1.21, rearAxleZ: -1.21,
     wheelRadius: 0.350, rearWheelRadius: 0.370, wheelWidth: 0.28, rearWheelWidth: 0.32, rimRadius: 0.270, rearRimRadius: 0.290, rimColor: 0x94a3b8,
@@ -2782,28 +2939,30 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
 
   // Materials for Photorealistic BTTF DeLorean Finish
   const brushedSteel = new THREE.MeshStandardMaterial({
-    color: 0xc4c9d2,
-    metalness: 0.96,
+    color: 0xd8dce4,
+    metalness: 0.95,
     roughness: 0.16,
-    envMapIntensity: 1.5,
+    envMapIntensity: 2.0,
   });
-  const blackPlastics = new THREE.MeshStandardMaterial({ color: 0x11161d, roughness: 0.82 });
+  const blackPlastics = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.85, metalness: 0.1 });
   const neonCyanFlux = new THREE.MeshStandardMaterial({
-    color: 0x00d8ff,
-    emissive: 0x00c8ff,
-    emissiveIntensity: 2.2,
-    roughness: 0.1,
+    color: 0x00f0ff,
+    emissive: 0x00e0ff,
+    emissiveIntensity: 2.8,
+    roughness: 0.05,
   });
   const goldEmissive = new THREE.MeshStandardMaterial({
-    color: 0xffd700,
-    emissive: 0xffaa00,
-    emissiveIntensity: 2.0,
+    color: 0xffe000,
+    emissive: 0xffa000,
+    emissiveIntensity: 2.5,
   });
-  const whiteMrFusion = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.1 });
-  const chromeDetails = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.98, roughness: 0.08 });
-  const ledRed = new THREE.MeshBasicMaterial({ color: 0xff2222 });
-  const ledGreen = new THREE.MeshBasicMaterial({ color: 0x22ff22 });
-  const ledAmber = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+  const whiteMrFusion = new THREE.MeshStandardMaterial({
+    map: createMrFusionLogoTexture(),
+    color: 0xffffff,
+    roughness: 0.2,
+    metalness: 0.1,
+  });
+  const chromeDetails = new THREE.MeshStandardMaterial({ color: 0xf8fafc, metalness: 0.98, roughness: 0.05 });
 
   // Apply brushed stainless steel finish to body parts
   root.traverse((obj) => {
@@ -2814,124 +2973,139 @@ export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: T
     }
   });
 
-  // 1. DMC Front Grille & Quad Headlights
+  // 1. DMC Front Grille, Badge, Quad Headlights & Volumetric Beam Cones
   const grilleGroup = new THREE.Group();
   grilleGroup.name = 'delorean_dmc_grille';
   const grilleBg = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.22, 0.06), blackPlastics);
   grilleBg.position.set(0, 0.52, 2.12);
   grilleGroup.add(grilleBg);
 
-  const dmcBadge = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.08), chromeDetails);
-  dmcBadge.position.set(0, 0.52, 2.14);
+  const dmcBadge = new THREE.Mesh(
+    new THREE.BoxGeometry(0.32, 0.09, 0.08),
+    new THREE.MeshStandardMaterial({ map: createDmcEmblemTexture(), metalness: 0.8, roughness: 0.2 })
+  );
+  dmcBadge.position.set(0, 0.52, 2.15);
   grilleGroup.add(dmcBadge);
 
   [-1, 1].forEach((side) => {
-    [0.52, 0.72].forEach((xOff) => {
-      const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.04), new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        emissive: 0xe0f2fe,
-        emissiveIntensity: 1.8,
-        roughness: 0.05,
-      }));
-      headlight.position.set(side * xOff, 0.52, 2.14);
+    [0.48, 0.72].forEach((xOff) => {
+      const headlight = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.13, 0.05),
+        new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          emissive: 0xf0f9ff,
+          emissiveIntensity: 2.5,
+          roughness: 0.02,
+        })
+      );
+      headlight.position.set(side * xOff, 0.52, 2.15);
       grilleGroup.add(headlight);
     });
 
-    const blinker = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 0.04), new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
-      emissive: 0xd97706,
-      emissiveIntensity: 1.2,
-    }));
+    const blinker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.28, 0.07, 0.04),
+      new THREE.MeshStandardMaterial({
+        color: 0xf59e0b,
+        emissive: 0xd97706,
+        emissiveIntensity: 1.5,
+      })
+    );
     blinker.position.set(side * 0.62, 0.34, 2.12);
     grilleGroup.add(blinker);
   });
   root.add(grilleGroup);
 
-  // 2. Exterior Time Machine Blue Conduit Cables & Flux Coils
+  // 2. OUTATIME License Plate on Rear Bumper
+  const plateTex = createOutatimePlateTexture();
+  const licensePlate = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.38, 0.19),
+    new THREE.MeshBasicMaterial({ map: plateTex, side: THREE.DoubleSide })
+  );
+  licensePlate.position.set(0, 0.46, -2.14);
+  licensePlate.rotation.y = Math.PI;
+  root.add(licensePlate);
+
+  // 3. Exterior Time Machine Blue Conduit Cables & Flux Coils
   const conduits = new THREE.Group();
   conduits.name = 'delorean_flux_conduits';
 
   [-1, 1].forEach((side) => {
-    const sideTube = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2.8, 8), neonCyanFlux);
+    const sideTube = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 2.8, 10), neonCyanFlux);
     sideTube.rotation.x = Math.PI / 2;
     sideTube.position.set(side * 0.91, 0.38, 0);
     conduits.add(sideTube);
 
-    const frontArch = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.02, 6, 12, Math.PI), neonCyanFlux);
+    const frontArch = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.022, 8, 16, Math.PI), neonCyanFlux);
     frontArch.rotation.y = Math.PI / 2;
     frontArch.position.set(side * 0.92, 0.38, 1.21);
     conduits.add(frontArch);
 
-    const rearArch = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.02, 6, 12, Math.PI), neonCyanFlux);
+    const rearArch = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.022, 8, 16, Math.PI), neonCyanFlux);
     rearArch.rotation.y = Math.PI / 2;
     rearArch.position.set(side * 0.92, 0.38, -1.21);
     conduits.add(rearArch);
   });
 
-  const frontCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.76, 8), neonCyanFlux);
+  const frontCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.76, 10), neonCyanFlux);
   frontCoil.rotation.z = Math.PI / 2;
   frontCoil.position.set(0, 0.36, 2.08);
   conduits.add(frontCoil);
 
-  const rearCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.76, 8), neonCyanFlux);
+  const rearCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 1.76, 10), neonCyanFlux);
   rearCoil.rotation.z = Math.PI / 2;
   rearCoil.position.set(0, 0.38, -2.08);
   conduits.add(rearCoil);
   root.add(conduits);
 
-  // 3. Rear Deck Twin Reactor Exhaust Vents & Mr. Fusion
+  // 4. Rear Deck Twin Reactor Exhaust Vents & Mr. Fusion
   const reactorGroup = new THREE.Group();
   reactorGroup.name = 'delorean_time_reactor';
 
   [-1, 1].forEach((side) => {
-    const ventBody = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.65), blackPlastics);
+    const ventBody = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.44, 0.68), blackPlastics);
     ventBody.position.set(side * 0.52, 0.88, -1.72);
     ventBody.rotation.x = -0.15;
 
-    const ventInterior = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), neonCyanFlux);
-    ventInterior.position.set(side * 0.52, 0.88, -2.04);
+    const ventInterior = new THREE.Mesh(new THREE.PlaneGeometry(0.44, 0.38), neonCyanFlux);
+    ventInterior.position.set(side * 0.52, 0.88, -2.06);
     ventInterior.rotation.y = Math.PI;
 
     reactorGroup.add(ventBody, ventInterior);
   });
 
-  const mrFusionBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.35, 12), whiteMrFusion);
+  const mrFusionBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.38, 16), whiteMrFusion);
   mrFusionBase.position.set(0, 1.05, -1.25);
-  const mrFusionLid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.08, 12), blackPlastics);
-  mrFusionLid.position.set(0, 1.24, -1.25);
-  const mrFusionLatch = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.08), chromeDetails);
-  mrFusionLatch.position.set(0, 1.20, -1.08);
+  const mrFusionLid = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.20, 0.08, 16), blackPlastics);
+  mrFusionLid.position.set(0, 1.25, -1.25);
+  const mrFusionLatch = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.16, 0.08), chromeDetails);
+  mrFusionLatch.position.set(0, 1.22, -1.08);
   reactorGroup.add(mrFusionBase, mrFusionLid, mrFusionLatch);
 
-  const junctionBox = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.42), chromeDetails);
+  const junctionBox = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.20, 0.44), chromeDetails);
   junctionBox.position.set(0, 0.82, -1.45);
   reactorGroup.add(junctionBox);
   root.add(reactorGroup);
 
-  // 4. Cabin Interior Flux Capacitor & Time Circuits Dashboard
-  const fluxCapacitorBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.12), blackPlastics);
+  // 5. Cabin Interior Flux Capacitor & Time Circuits Dashboard
+  const fluxCapacitorBox = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.30, 0.14), blackPlastics);
   fluxCapacitorBox.position.set(0, 0.72, -0.42);
 
   const fluxYCore = new THREE.Group();
   for (let a = 0; a < 3; a++) {
     const angle = (a * 120 - 90) * (Math.PI / 180);
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.10, 6), goldEmissive);
-    tube.position.set(Math.cos(angle) * 0.04, Math.sin(angle) * 0.04, 0.06);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.12, 8), goldEmissive);
+    tube.position.set(Math.cos(angle) * 0.045, Math.sin(angle) * 0.045, 0.07);
     tube.rotation.z = angle + Math.PI / 2;
     fluxYCore.add(tube);
   }
   fluxCapacitorBox.add(fluxYCore);
   root.add(fluxCapacitorBox);
 
-  const timeCircuitsDash = new THREE.Group();
-  timeCircuitsDash.position.set(0, 0.76, 0.42);
-  const redLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledRed);
-  redLed.position.y = 0.06;
-  const greenLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledGreen);
-  greenLed.position.y = 0.0;
-  const amberLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledAmber);
-  amberLed.position.y = -0.06;
-  timeCircuitsDash.add(redLed, greenLed, amberLed);
+  const timeCircuitsDash = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.32, 0.18),
+    new THREE.MeshBasicMaterial({ map: createTimeCircuitsTexture(), side: THREE.DoubleSide })
+  );
+  timeCircuitsDash.position.set(0, 0.78, 0.45);
   root.add(timeCircuitsDash);
 
   return car;
@@ -2947,30 +3121,52 @@ export function createDocBrownNPC(): THREE.Group {
 
   const whiteMat = createMaterial(0xffffff);
   const goldMat = createMaterial(0xfacc15);
-  const darkMetal = createMaterial(0x334155, 0.3, 0.8);
+  const darkMetal = createMaterial(0x1e293b, 0.2, 0.8);
+  const chromeMat = createMaterial(0xf8fafc, 0.95, 0.1);
   const antennaMat = createMaterial(0xe2e8f0, 0.1, 0.9);
 
-  for (let i = 0; i < 9; i++) {
-    const hairCluster = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.38, 5), whiteMat);
-    const angle = (i / 9) * Math.PI * 2;
-    hairCluster.position.set(Math.cos(angle) * 0.28, 2.38 + Math.sin(i * 1.5) * 0.08, Math.sin(angle) * 0.28);
-    hairCluster.rotation.x = Math.sin(angle) * 0.45;
-    hairCluster.rotation.z = -Math.cos(angle) * 0.45;
+  // Iconic Wild 3D Spiked White Hair in all directions
+  for (let i = 0; i < 12; i++) {
+    const hairCluster = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.42, 6), whiteMat);
+    const angle = (i / 12) * Math.PI * 2;
+    hairCluster.position.set(Math.cos(angle) * 0.30, 2.38 + Math.sin(i * 1.5) * 0.10, Math.sin(angle) * 0.30);
+    hairCluster.rotation.x = Math.sin(angle) * 0.52;
+    hairCluster.rotation.z = -Math.cos(angle) * 0.52;
     root.add(hairCluster);
   }
 
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.12, 0.38), goldMat);
+  // Safety Goggles pushed up on forehead
+  const goggleStrap = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.03, 6, 16), darkMetal);
+  goggleStrap.position.set(0, 2.22, 0);
+  goggleStrap.rotation.x = Math.PI / 2;
+  root.add(goggleStrap);
+
+  [-0.14, 0.14].forEach((xOff) => {
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), chromeMat);
+    lens.position.set(xOff, 2.26, 0.32);
+    lens.rotation.x = Math.PI / 2;
+    root.add(lens);
+  });
+
+  // Radiation Suit Details: Hazard Belt & Neck Stopwatch
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.14, 0.40), goldMat);
   belt.position.set(0, 1.02, 0);
   root.add(belt);
 
+  const stopwatch = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.04, 12), chromeMat);
+  stopwatch.position.set(0, 1.42, 0.26);
+  stopwatch.rotation.x = Math.PI / 2;
+  root.add(stopwatch);
+
+  // Futaba DeLorean Remote Controller held in hands
   const rcRemote = new THREE.Group();
   rcRemote.name = 'signature_prop';
   rcRemote.position.set(0.48, 1.15, 0.32);
-  const rcBox = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.18), darkMetal);
-  const rcAntenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.85, 6), antennaMat);
-  rcAntenna.position.set(-0.08, 0.48, 0);
-  const redBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 6), createMaterial(0xef4444));
-  redBtn.position.set(0.06, 0.12, 0.04);
+  const rcBox = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.24, 0.20), darkMetal);
+  const rcAntenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.95, 6), antennaMat);
+  rcAntenna.position.set(-0.08, 0.52, 0);
+  const redBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 8), createMaterial(0xef4444));
+  redBtn.position.set(0.06, 0.13, 0.05);
   rcRemote.add(rcBox, rcAntenna, redBtn);
   root.add(rcRemote);
 
@@ -2981,35 +3177,109 @@ export function createDocBrownNPC(): THREE.Group {
 export function createMartyMcFlyNPC(): THREE.Group {
   const root = createCameoHumanoid({
     name: 'npc_marty_mcfly',
-    skin: 0xfce4d6, torso: 0xea580c, legs: 0x1d4ed8, boots: 0xffffff, hair: 0x5c3d2e,
-    scale: 0.96, combatWeight: 0.95,
+    skin: 0xfce4d6, torso: 0xd97706, legs: 0x1d4ed8, boots: 0xffffff,
+    scale: 0.98, combatWeight: 0.95,
   });
 
-  const orangeVestMat = createMaterial(0xea580c);
-  const denimBlueMat = createMaterial(0x2563eb);
-  const pinkHoverMat = createMaterial(0xec4899);
-  const yellowMat = createMaterial(0xfacc15);
+  const hairColor = 0x5c3d2e;
+  const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.5, metalness: 0.05 });
+  const vestMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.45, metalness: 0.1 }); // Red/Orange Down Vest
+  const denimMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.6, metalness: 0.05 }); // Blue Denim Jacket/Jeans
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 }); // Inner Checkered Shirt
+  const brassMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 });
 
-  const puffyVest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.72, 0.38), orangeVestMat);
-  puffyVest.position.set(0, 1.35, 0.02);
-  root.add(puffyVest);
-
-  [-1, 1].forEach((sign) => {
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.55, 8), denimBlueMat);
-    sleeve.position.set(sign * 0.42, 1.28, 0);
-    root.add(sleeve);
+  // Add Marty's signature 1985 Feathered Hair Quiff & Swoop to headGroup
+  let headGroup: THREE.Group | null = null;
+  root.traverse((child) => {
+    if (child instanceof THREE.Group && child.position.y > 1.9) {
+      headGroup = child;
+    }
   });
 
+  if (headGroup) {
+    const hairGroup = new THREE.Group();
+    hairGroup.name = 'marty_feathered_hair';
+
+    // Top Cap positioned high and back (never obscures eyes)
+    const topCap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 24), hairMat);
+    topCap.position.set(0, 0.15, -0.04);
+    topCap.scale.set(0.95, 0.60, 0.82);
+    hairGroup.add(topCap);
+
+    // Iconic Front Quiff / Swoop (Flipped up and over forehead)
+    const frontQuiff = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.30, 12), hairMat);
+    frontQuiff.position.set(0.06, 0.26, 0.16);
+    frontQuiff.rotation.x = -Math.PI / 3.2;
+    frontQuiff.rotation.z = -Math.PI / 7;
+    hairGroup.add(frontQuiff);
+
+    // Feathered Side Bangs/Waves
+    [-1, 1].forEach((side) => {
+      const sideWave = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 10), hairMat);
+      sideWave.position.set(side * 0.26, 0.10, 0.06);
+      sideWave.rotation.z = side * -Math.PI / 4;
+      sideWave.rotation.x = -Math.PI / 6;
+      hairGroup.add(sideWave);
+    });
+
+    // Back Length touching collar
+    const backHair = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.24, 16), hairMat);
+    backHair.position.set(0, -0.06, -0.16);
+    backHair.rotation.x = 0.22;
+    hairGroup.add(backHair);
+
+    headGroup.add(hairGroup);
+  }
+
+  // Outfit: Red/Orange Open Down Vest with Brass Buttons & Denim Jacket Collar
+  const vestGroup = new THREE.Group();
+  vestGroup.name = 'marty_vest';
+
+  // Inner Shirt & Denim Collar
+  const innerShirt = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.50, 0.22), shirtMat);
+  innerShirt.position.set(0, 1.48, 0.12);
+  vestGroup.add(innerShirt);
+
+  const denimCollarL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), denimMat);
+  denimCollarL.position.set(-0.16, 1.68, 0.20);
+  denimCollarL.rotation.z = -0.3;
+  const denimCollarR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), denimMat);
+  denimCollarR.position.set(0.16, 1.68, 0.20);
+  denimCollarR.rotation.z = 0.3;
+  vestGroup.add(denimCollarL, denimCollarR);
+
+  // Open Down Vest Left and Right Puffy Panels with Baffles
+  [-1, 1].forEach((side) => {
+    const vestPanel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.68, 0.38), vestMat);
+    vestPanel.position.set(side * 0.24, 1.36, 0.04);
+    vestGroup.add(vestPanel);
+
+    // Brass Snap Buttons along inner seam
+    [1.18, 1.34, 1.50].forEach((yPos) => {
+      const button = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 8), brassMat);
+      button.position.set(side * 0.11, yPos, 0.22);
+      button.rotation.x = Math.PI / 2;
+      vestGroup.add(button);
+    });
+  });
+
+  root.add(vestGroup);
+
+  // Mattel Pink Hoverboard
   const hoverboard = new THREE.Group();
   hoverboard.name = 'signature_prop';
   hoverboard.position.set(0, 1.35, -0.28);
   hoverboard.rotation.z = -0.35;
-  const boardDeck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.85, 0.04), pinkHoverMat);
-  const pad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8), yellowMat);
-  pad1.position.set(0, 0.22, 0.02);
+  const boardTex = createHoverboardTexture();
+  const boardDeck = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.88, 0.04),
+    new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.3 })
+  );
+  const pad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), brassMat);
+  pad1.position.set(0, 0.22, 0.025);
   pad1.rotation.x = Math.PI / 2;
   const pad2 = pad1.clone();
-  pad2.position.set(0, -0.22, 0.02);
+  pad2.position.set(0, -0.22, 0.025);
   hoverboard.add(boardDeck, pad1, pad2);
   root.add(hoverboard);
 
@@ -4156,63 +4426,145 @@ function createCameoHumanoid(options: CameoHumanoidOptions): THREE.Group {
   root.userData.combatWeight = options.combatWeight ?? 1;
   root.userData.movementMode = 'ground';
 
-  const skinMat = createMaterial(options.skin);
-  const torsoMat = createMaterial(options.torso);
-  const legsMat = createMaterial(options.legs);
-  const bootMat = createMaterial(options.boots ?? 0x27272a);
-  const darkMat = createMaterial(0x111827);
+  const skinMat = new THREE.MeshStandardMaterial({ color: options.skin, roughness: 0.52, metalness: 0.05 });
+  const torsoMat = new THREE.MeshStandardMaterial({ color: options.torso, roughness: 0.65, metalness: 0.1 });
+  const legsMat = new THREE.MeshStandardMaterial({ color: options.legs, roughness: 0.70, metalness: 0.05 });
+  const bootMat = new THREE.MeshStandardMaterial({ color: options.boots ?? 0x18181b, roughness: 0.45, metalness: 0.2 });
+  const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const irisMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+  const hairMat = options.hair !== undefined ? new THREE.MeshStandardMaterial({ color: options.hair, roughness: 0.6, metalness: 0.1 }) : null;
 
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.0, 0.42), torsoMat);
-  torso.position.y = 1.25;
-  torso.castShadow = true;
-  root.add(torso);
+  // 1. Smooth Anatomical Torso & Chest
+  const chestGroup = new THREE.Group();
+  const upperChest = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.32, 0.52, 16), torsoMat);
+  upperChest.position.y = 1.48;
+  upperChest.scale.set(1.15, 1, 0.75);
+  upperChest.castShadow = true;
 
-  const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35, 0), skinMat);
-  head.position.y = 2.05;
-  head.castShadow = true;
-  root.add(head);
+  const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.30, 0.48, 16), torsoMat);
+  waist.position.y = 1.02;
+  waist.scale.set(1.08, 1, 0.72);
+  waist.castShadow = true;
 
-  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 4, 4), darkMat);
-  eyeL.position.set(-0.12, 2.1, 0.32);
-  const eyeR = eyeL.clone();
-  eyeR.position.x = 0.12;
-  root.add(eyeL, eyeR);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.22, 16), skinMat);
+  neck.position.y = 1.82;
 
-  if (options.hair !== undefined) {
-    const hair = new THREE.Mesh(new THREE.DodecahedronGeometry(0.39, 0), createMaterial(options.hair));
-    hair.scale.set(1, 0.55, 1);
-    hair.position.set(0, 2.28, -0.03);
-    root.add(hair);
+  chestGroup.add(upperChest, waist, neck);
+  root.add(chestGroup);
+
+  // 2. Smooth Head & Face Features (Sphere 32 segs, ears, eyes, nose)
+  const headGroup = new THREE.Group();
+  headGroup.position.y = 2.08;
+
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.34, 32, 32), skinMat);
+  headMesh.scale.set(0.92, 1.08, 0.98);
+  headMesh.castShadow = true;
+  headGroup.add(headMesh);
+
+  // Nose
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.14, 12), skinMat);
+  nose.position.set(0, -0.02, 0.32);
+  nose.rotation.x = -Math.PI / 10;
+  headGroup.add(nose);
+
+  // Ears
+  [-1, 1].forEach((side) => {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.065, 12, 12), skinMat);
+    ear.scale.set(0.5, 1.2, 0.8);
+    ear.position.set(side * 0.31, 0.0, 0.02);
+    headGroup.add(ear);
+  });
+
+  // Eyes with white sclera and dark iris (positioned forward at Z=0.32)
+  [-1, 1].forEach((side) => {
+    const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 12), eyeWhiteMat);
+    eyeWhite.position.set(side * 0.11, 0.05, 0.31);
+
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 12), irisMat);
+    iris.position.set(side * 0.11, 0.05, 0.35);
+
+    headGroup.add(eyeWhite, iris);
+  });
+
+  // Eyebrows
+  const browMat = hairMat || new THREE.MeshBasicMaterial({ color: 0x332211 });
+  [-1, 1].forEach((side) => {
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.025, 0.03), browMat);
+    brow.position.set(side * 0.11, 0.13, 0.32);
+    brow.rotation.z = side * -0.10;
+    headGroup.add(brow);
+  });
+
+  // Lips / Mouth
+  const lipMat = new THREE.MeshStandardMaterial({ color: 0xd98880, roughness: 0.6 });
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.03), lipMat);
+  mouth.position.set(0, -0.14, 0.32);
+  headGroup.add(mouth);
+
+  // Smooth Hair Cap (Positioned UP and BACK so it never covers eyes)
+  if (hairMat) {
+    const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 24), hairMat);
+    hairCap.position.set(0, 0.16, -0.05);
+    hairCap.scale.set(0.92, 0.60, 0.80);
+    headGroup.add(hairCap);
   }
 
-  const armGeo = new THREE.CylinderGeometry(0.11, 0.13, 0.82, 6);
-  const armL = new THREE.Mesh(armGeo, torsoMat);
-  armL.name = 'arm_left';
-  armL.position.set(-0.49, 1.25, 0);
-  const armR = new THREE.Mesh(armGeo, torsoMat);
-  armR.name = 'arm_right';
-  armR.position.set(0.49, 1.25, 0);
-  root.add(armL, armR);
+  root.add(headGroup);
 
-  const legGeo = new THREE.CylinderGeometry(0.14, 0.13, 0.75, 6);
-  const legL = new THREE.Mesh(legGeo, legsMat);
-  legL.name = 'leg_left';
-  legL.position.set(-0.2, 0.52, 0);
-  const legR = new THREE.Mesh(legGeo, legsMat);
-  legR.name = 'leg_right';
-  legR.position.set(0.2, 0.52, 0);
-  root.add(legL, legR);
+  // 3. Smooth Anatomical Arms (Shoulder, Upper Arm, Elbow, Forearm, Hands)
+  for (const side of [-1, 1]) {
+    const armGroup = new THREE.Group();
+    armGroup.name = side === -1 ? 'arm_left' : 'arm_right';
+    armGroup.position.set(side * 0.44, 1.58, 0);
 
-  const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.16, 0.45), bootMat);
-  shoeL.position.set(-0.2, 0.10, 0.08);
-  const shoeR = shoeL.clone();
-  shoeR.position.x = 0.2;
-  root.add(shoeL, shoeR);
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), torsoMat);
+
+    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.09, 0.38, 16), torsoMat);
+    upperArm.position.y = -0.22;
+
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.088, 16, 16), torsoMat);
+    elbow.position.y = -0.42;
+
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.36, 16), skinMat);
+    forearm.position.y = -0.62;
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), skinMat);
+    hand.scale.set(0.8, 1.2, 0.6);
+    hand.position.y = -0.82;
+
+    armGroup.add(shoulder, upperArm, elbow, forearm, hand);
+    root.add(armGroup);
+  }
+
+  // 4. Smooth Anatomical Legs & Boots
+  for (const side of [-1, 1]) {
+    const legGroup = new THREE.Group();
+    legGroup.name = side === -1 ? 'leg_left' : 'leg_right';
+    legGroup.position.set(side * 0.18, 0.82, 0);
+
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.42, 16), legsMat);
+    thigh.position.y = -0.22;
+
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 16), legsMat);
+    knee.position.y = -0.44;
+
+    const calf = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.095, 0.40, 16), legsMat);
+    calf.position.y = -0.66;
+
+    // Boot/Shoe
+    const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.12, 0.22, 16), bootMat);
+    boot.position.set(0, -0.85, 0.04);
+    boot.scale.set(0.9, 1, 1.4);
+
+    legGroup.add(thigh, knee, calf, boot);
+    root.add(legGroup);
+  }
 
   if (options.cape !== undefined) {
-    const cape = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.45), createMaterial(options.cape));
+    const capeMat = new THREE.MeshStandardMaterial({ color: options.cape, roughness: 0.7, side: THREE.DoubleSide });
+    const cape = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.40, 8, 8), capeMat);
     cape.name = 'cape';
-    cape.position.set(0, 1.35, -0.28);
+    cape.position.set(0, 1.35, -0.26);
     cape.rotation.x = -0.08;
     root.add(cape);
   }

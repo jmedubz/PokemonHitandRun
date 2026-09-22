@@ -1056,14 +1056,39 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
 
             {/* Digital Speed Display */}
-            <div className="flex items-baseline justify-between my-2">
-              <div className="font-black text-4xl tracking-tight text-white font-mono">
-                {Math.round(Math.abs(currentVehicle.speed * 2.5))}
-              </div>
-              <div className="text-xs font-black text-slate-400 tracking-widest uppercase">
-                KM/H
-              </div>
-            </div>
+            {(() => {
+              const isDeLorean = currentVehicle.type === 'delorean_time_machine' || currentVehicle.type === 'delorean' || (currentVehicle.name && currentVehicle.name.toLowerCase().includes('delorean'));
+              const speedVal = isDeLorean
+                ? Math.round(Math.abs(currentVehicle.speed * 2.237))
+                : Math.round(Math.abs(currentVehicle.speed * 2.5));
+              const isFluxActive = isDeLorean && speedVal >= 88;
+
+              return (
+                <div>
+                  <div className="flex items-baseline justify-between my-2">
+                    <div className={`font-black text-4xl tracking-tight font-mono ${
+                      isDeLorean
+                        ? (isFluxActive ? 'text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]' : 'text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]')
+                        : 'text-white'
+                    }`}>
+                      {speedVal}
+                    </div>
+                    <div className={`text-xs font-black tracking-widest uppercase ${isDeLorean ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}>
+                      {isDeLorean ? 'MPH' : 'KM/H'}
+                    </div>
+                  </div>
+                  {isDeLorean && (
+                    <div className={`text-[10px] font-black uppercase tracking-wider text-center py-1 px-2 mb-2 rounded border transition-all ${
+                      isFluxActive
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-400/60 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                        : 'bg-cyan-950/40 text-cyan-400/90 border-cyan-800/40'
+                    }`}>
+                      {isFluxActive ? '⚡ 88 MPH — FLUX CAPACITOR ACTIVATED ⚡' : '1.21 GW TIME CIRCUIT READY'}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Speedometer Gauge Bar */}
             <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-800 mb-2">

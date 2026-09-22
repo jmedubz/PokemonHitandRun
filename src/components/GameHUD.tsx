@@ -806,7 +806,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               event.currentTarget.blur();
               onTogglePause();
             }}
-            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/80 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)] transition flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            onTouchStart={(event) => event.stopPropagation()}
+            onTouchEnd={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.blur();
+              onTogglePause();
+            }}
+            className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/80 rounded-lg text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.25)] transition flex items-center gap-1.5 text-xs font-black cursor-pointer touch-manipulation select-none"
             title="Pause Game / Multiplayer Menu (ESC)"
           >
             <Pause className="w-4 h-4 text-amber-300" />
@@ -878,8 +885,15 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           )}
           <button
             id="btn-toggle-sound"
+            type="button"
             onClick={onToggleMute}
-            className="p-2.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 shadow-md transition"
+            onTouchStart={(event) => event.stopPropagation()}
+            onTouchEnd={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleMute();
+            }}
+            className="p-2.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 shadow-md transition cursor-pointer touch-manipulation select-none"
             title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
@@ -901,7 +915,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               event.currentTarget.blur();
               onResetPlayer();
             }}
-            className="p-2.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 shadow-md transition flex items-center gap-1.5 text-xs font-bold"
+            onTouchStart={(event) => event.stopPropagation()}
+            onTouchEnd={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.blur();
+              onResetPlayer();
+            }}
+            className="p-2.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-700 rounded-lg text-slate-200 shadow-md transition flex items-center gap-1.5 text-xs font-bold cursor-pointer touch-manipulation select-none"
             title="Recover to last safe position"
           >
             <RotateCcw className="w-4 h-4 text-amber-400" /> Reset Pos

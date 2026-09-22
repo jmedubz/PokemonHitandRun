@@ -26,6 +26,7 @@ import {
   createBmwF90M5,
   createLamborghiniAventador,
   createFerrariF12,
+  createDeLoreanTimeMachine,
   createPoliceCrownVic,
   createPoliceCharger,
   createOfficerLouNPC,
@@ -3003,6 +3004,7 @@ export default function App() {
       bmw_f90_m5: createBmwF90M5,
       lamborghini_aventador: createLamborghiniAventador,
       ferrari_f12: createFerrariF12,
+      delorean_time_machine: createDeLoreanTimeMachine,
     };
     const heroTuning: Partial<Record<VehicleModelType, { maxSpeed: number; acceleration: number }>> = {
       bmw_f80_m3: { maxSpeed: 100, acceleration: 39 },
@@ -3010,6 +3012,7 @@ export default function App() {
       bmw_f90_m5: { maxSpeed: 124, acceleration: 49 },
       lamborghini_aventador: { maxSpeed: 140, acceleration: 53 },
       ferrari_f12: { maxSpeed: 136, acceleration: 51 },
+      delorean_time_machine: { maxSpeed: 152, acceleration: 62 },
     };
 
     const parkedHeroBounds: THREE.Box3[] = [];

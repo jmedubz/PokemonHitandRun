@@ -2842,13 +2842,11 @@ export function buildGoldenrodCity(): GoldenrodBuildResult {
   const carBays: { type: VehicleModelType; name: string; pos: THREE.Vector3; rotationY: number }[] = [];
   const heroCarConfigs: { type: VehicleModelType; name: string; xOffset: number }[] = [
     { type: 'bmw_f80_m3', name: 'BMW F80 M3 (RWD)', xOffset: -16 },
-    // Give the M5 a genuinely clear bay on both sides. The rail pylon at world
-    // X≈152 sits between the M5 and Aventador, so the G80 moves slightly left and
-    // the F90 is centred farther from the pylon without crowding another car.
-    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -9.5 },
-    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -3.5 },
-    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 8 },
-    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 16 },
+    { type: 'bmw_g80_m3', name: 'BMW G80 M3 xDrive', xOffset: -9.8 },
+    { type: 'bmw_f90_m5', name: 'BMW F90 LCI M5', xOffset: -3.6 },
+    { type: 'lamborghini_aventador', name: 'Lamborghini Aventador V12', xOffset: 2.6 },
+    { type: 'ferrari_f12', name: 'Ferrari F12 Berlinetta', xOffset: 8.8 },
+    { type: 'delorean_time_machine', name: 'DeLorean DMC-12 Time Machine (1.21 GW)', xOffset: 15 },
   ];
 
   heroCarConfigs.forEach((hc) => {

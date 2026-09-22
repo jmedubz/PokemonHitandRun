@@ -1769,7 +1769,7 @@ type VehicleVisualNodes = {
 };
 
 interface HeroCarSpec {
-  id: 'bmw_f80_m3' | 'bmw_g80_m3' | 'bmw_f90_m5' | 'lamborghini_aventador' | 'ferrari_f12';
+  id: string;
   color: number;
   length: number;
   width: number;
@@ -2762,6 +2762,258 @@ export function createFerrariF12Model(): { mesh: THREE.Group; wheels: THREE.Mesh
     frontWindow: [[0.46,0.99],[0.10,1.17],[-0.36,1.18],[-0.38,0.99]],
     rearSideWindow: [[-0.44,0.99],[-0.46,1.17],[-0.68,1.16],[-1.00,0.98]],
   });
+}
+
+// 6. Photorealistic DeLorean DMC-12 Time Machine (Back to the Future 1.21 GW Edition)
+export function createDeLoreanTimeMachineModel(): { mesh: THREE.Group; wheels: THREE.Mesh[] } {
+  const car = buildHeroCar({
+    id: 'delorean_time_machine', bodyStyle: 'aventador', color: 0xd2d7df,
+    length: 4.27, width: 1.85, height: 1.14,
+    frontAxleZ: 1.21, rearAxleZ: -1.21,
+    wheelRadius: 0.350, rearWheelRadius: 0.370, wheelWidth: 0.28, rearWheelWidth: 0.32, rimRadius: 0.270, rearRimRadius: 0.290, rimColor: 0x94a3b8,
+    spokeCount: 15, doubleSpoke: false, carbonRoof: false, twoDoor: true,
+    bodyProfile: [[2.13,0.31],[2.08,0.52],[1.45,0.68],[0.72,0.76],[0.20,0.80],[-0.60,0.80],[-1.20,0.74],[-1.95,0.62],[-2.13,0.42],[-2.08,0.28],[-1.60,0.26],[1.75,0.26]],
+    glassProfile: [[0.58,0.76],[0.20,1.02],[-0.58,1.03],[-0.98,0.78]],
+    frontWindow: [[0.52,0.79],[0.18,0.99],[-0.30,1.00],[-0.34,0.80]],
+    rearSideWindow: [[-0.38,0.80],[-0.40,0.99],[-0.62,0.99],[-0.92,0.80]],
+  });
+
+  const root = car.mesh;
+
+  // Materials for Photorealistic BTTF DeLorean Finish
+  const brushedSteel = new THREE.MeshStandardMaterial({
+    color: 0xc4c9d2,
+    metalness: 0.96,
+    roughness: 0.16,
+    envMapIntensity: 1.5,
+  });
+  const blackPlastics = new THREE.MeshStandardMaterial({ color: 0x11161d, roughness: 0.82 });
+  const neonCyanFlux = new THREE.MeshStandardMaterial({
+    color: 0x00d8ff,
+    emissive: 0x00c8ff,
+    emissiveIntensity: 2.2,
+    roughness: 0.1,
+  });
+  const goldEmissive = new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    emissive: 0xffaa00,
+    emissiveIntensity: 2.0,
+  });
+  const whiteMrFusion = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.25, metalness: 0.1 });
+  const chromeDetails = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.98, roughness: 0.08 });
+  const ledRed = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+  const ledGreen = new THREE.MeshBasicMaterial({ color: 0x22ff22 });
+  const ledAmber = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+
+  // Apply brushed stainless steel finish to body parts
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh && obj.material) {
+      if (obj.name.includes('body')) {
+        obj.material = brushedSteel;
+      }
+    }
+  });
+
+  // 1. DMC Front Grille & Quad Headlights
+  const grilleGroup = new THREE.Group();
+  grilleGroup.name = 'delorean_dmc_grille';
+  const grilleBg = new THREE.Mesh(new THREE.BoxGeometry(1.72, 0.22, 0.06), blackPlastics);
+  grilleBg.position.set(0, 0.52, 2.12);
+  grilleGroup.add(grilleBg);
+
+  const dmcBadge = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.08), chromeDetails);
+  dmcBadge.position.set(0, 0.52, 2.14);
+  grilleGroup.add(dmcBadge);
+
+  [-1, 1].forEach((side) => {
+    [0.52, 0.72].forEach((xOff) => {
+      const headlight = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.04), new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        emissive: 0xe0f2fe,
+        emissiveIntensity: 1.8,
+        roughness: 0.05,
+      }));
+      headlight.position.set(side * xOff, 0.52, 2.14);
+      grilleGroup.add(headlight);
+    });
+
+    const blinker = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.07, 0.04), new THREE.MeshStandardMaterial({
+      color: 0xf59e0b,
+      emissive: 0xd97706,
+      emissiveIntensity: 1.2,
+    }));
+    blinker.position.set(side * 0.62, 0.34, 2.12);
+    grilleGroup.add(blinker);
+  });
+  root.add(grilleGroup);
+
+  // 2. Exterior Time Machine Blue Conduit Cables & Flux Coils
+  const conduits = new THREE.Group();
+  conduits.name = 'delorean_flux_conduits';
+
+  [-1, 1].forEach((side) => {
+    const sideTube = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2.8, 8), neonCyanFlux);
+    sideTube.rotation.x = Math.PI / 2;
+    sideTube.position.set(side * 0.91, 0.38, 0);
+    conduits.add(sideTube);
+
+    const frontArch = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.02, 6, 12, Math.PI), neonCyanFlux);
+    frontArch.rotation.y = Math.PI / 2;
+    frontArch.position.set(side * 0.92, 0.38, 1.21);
+    conduits.add(frontArch);
+
+    const rearArch = new THREE.Mesh(new THREE.TorusGeometry(0.44, 0.02, 6, 12, Math.PI), neonCyanFlux);
+    rearArch.rotation.y = Math.PI / 2;
+    rearArch.position.set(side * 0.92, 0.38, -1.21);
+    conduits.add(rearArch);
+  });
+
+  const frontCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.76, 8), neonCyanFlux);
+  frontCoil.rotation.z = Math.PI / 2;
+  frontCoil.position.set(0, 0.36, 2.08);
+  conduits.add(frontCoil);
+
+  const rearCoil = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1.76, 8), neonCyanFlux);
+  rearCoil.rotation.z = Math.PI / 2;
+  rearCoil.position.set(0, 0.38, -2.08);
+  conduits.add(rearCoil);
+  root.add(conduits);
+
+  // 3. Rear Deck Twin Reactor Exhaust Vents & Mr. Fusion
+  const reactorGroup = new THREE.Group();
+  reactorGroup.name = 'delorean_time_reactor';
+
+  [-1, 1].forEach((side) => {
+    const ventBody = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.42, 0.65), blackPlastics);
+    ventBody.position.set(side * 0.52, 0.88, -1.72);
+    ventBody.rotation.x = -0.15;
+
+    const ventInterior = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.36), neonCyanFlux);
+    ventInterior.position.set(side * 0.52, 0.88, -2.04);
+    ventInterior.rotation.y = Math.PI;
+
+    reactorGroup.add(ventBody, ventInterior);
+  });
+
+  const mrFusionBase = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.35, 12), whiteMrFusion);
+  mrFusionBase.position.set(0, 1.05, -1.25);
+  const mrFusionLid = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.08, 12), blackPlastics);
+  mrFusionLid.position.set(0, 1.24, -1.25);
+  const mrFusionLatch = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.08), chromeDetails);
+  mrFusionLatch.position.set(0, 1.20, -1.08);
+  reactorGroup.add(mrFusionBase, mrFusionLid, mrFusionLatch);
+
+  const junctionBox = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.18, 0.42), chromeDetails);
+  junctionBox.position.set(0, 0.82, -1.45);
+  reactorGroup.add(junctionBox);
+  root.add(reactorGroup);
+
+  // 4. Cabin Interior Flux Capacitor & Time Circuits Dashboard
+  const fluxCapacitorBox = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.28, 0.12), blackPlastics);
+  fluxCapacitorBox.position.set(0, 0.72, -0.42);
+
+  const fluxYCore = new THREE.Group();
+  for (let a = 0; a < 3; a++) {
+    const angle = (a * 120 - 90) * (Math.PI / 180);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.10, 6), goldEmissive);
+    tube.position.set(Math.cos(angle) * 0.04, Math.sin(angle) * 0.04, 0.06);
+    tube.rotation.z = angle + Math.PI / 2;
+    fluxYCore.add(tube);
+  }
+  fluxCapacitorBox.add(fluxYCore);
+  root.add(fluxCapacitorBox);
+
+  const timeCircuitsDash = new THREE.Group();
+  timeCircuitsDash.position.set(0, 0.76, 0.42);
+  const redLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledRed);
+  redLed.position.y = 0.06;
+  const greenLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledGreen);
+  greenLed.position.y = 0.0;
+  const amberLed = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.05, 0.02), ledAmber);
+  amberLed.position.y = -0.06;
+  timeCircuitsDash.add(redLed, greenLed, amberLed);
+  root.add(timeCircuitsDash);
+
+  return car;
+}
+
+// Back to the Future Main Character 1: Dr. Emmett Brown (Doc Brown)
+export function createDocBrownNPC(): THREE.Group {
+  const root = createCameoHumanoid({
+    name: 'npc_doc_brown',
+    skin: 0xfce4d6, torso: 0xf8fafc, legs: 0xf1f5f9, boots: 0x1e293b,
+    scale: 1.05, combatWeight: 1.0,
+  });
+
+  const whiteMat = createMaterial(0xffffff);
+  const goldMat = createMaterial(0xfacc15);
+  const darkMetal = createMaterial(0x334155, 0.3, 0.8);
+  const antennaMat = createMaterial(0xe2e8f0, 0.1, 0.9);
+
+  for (let i = 0; i < 9; i++) {
+    const hairCluster = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.38, 5), whiteMat);
+    const angle = (i / 9) * Math.PI * 2;
+    hairCluster.position.set(Math.cos(angle) * 0.28, 2.38 + Math.sin(i * 1.5) * 0.08, Math.sin(angle) * 0.28);
+    hairCluster.rotation.x = Math.sin(angle) * 0.45;
+    hairCluster.rotation.z = -Math.cos(angle) * 0.45;
+    root.add(hairCluster);
+  }
+
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.12, 0.38), goldMat);
+  belt.position.set(0, 1.02, 0);
+  root.add(belt);
+
+  const rcRemote = new THREE.Group();
+  rcRemote.name = 'signature_prop';
+  rcRemote.position.set(0.48, 1.15, 0.32);
+  const rcBox = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.18), darkMetal);
+  const rcAntenna = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.85, 6), antennaMat);
+  rcAntenna.position.set(-0.08, 0.48, 0);
+  const redBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 6), createMaterial(0xef4444));
+  redBtn.position.set(0.06, 0.12, 0.04);
+  rcRemote.add(rcBox, rcAntenna, redBtn);
+  root.add(rcRemote);
+
+  return root;
+}
+
+// Back to the Future Main Character 2: Marty McFly
+export function createMartyMcFlyNPC(): THREE.Group {
+  const root = createCameoHumanoid({
+    name: 'npc_marty_mcfly',
+    skin: 0xfce4d6, torso: 0xea580c, legs: 0x1d4ed8, boots: 0xffffff, hair: 0x5c3d2e,
+    scale: 0.96, combatWeight: 0.95,
+  });
+
+  const orangeVestMat = createMaterial(0xea580c);
+  const denimBlueMat = createMaterial(0x2563eb);
+  const pinkHoverMat = createMaterial(0xec4899);
+  const yellowMat = createMaterial(0xfacc15);
+
+  const puffyVest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.72, 0.38), orangeVestMat);
+  puffyVest.position.set(0, 1.35, 0.02);
+  root.add(puffyVest);
+
+  [-1, 1].forEach((sign) => {
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.11, 0.55, 8), denimBlueMat);
+    sleeve.position.set(sign * 0.42, 1.28, 0);
+    root.add(sleeve);
+  });
+
+  const hoverboard = new THREE.Group();
+  hoverboard.name = 'signature_prop';
+  hoverboard.position.set(0, 1.35, -0.28);
+  hoverboard.rotation.z = -0.35;
+  const boardDeck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.85, 0.04), pinkHoverMat);
+  const pad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 8), yellowMat);
+  pad1.position.set(0, 0.22, 0.02);
+  pad1.rotation.x = Math.PI / 2;
+  const pad2 = pad1.clone();
+  pad2.position.set(0, -0.22, 0.02);
+  hoverboard.add(boardDeck, pad1, pad2);
+  root.add(hoverboard);
+
+  return root;
 }
 
 // ----------------------------------------------------
@@ -3810,6 +4062,9 @@ export function createVehicleModel(modelType: string, colorHex?: number): THREE.
       return createLamborghiniAventadorModel().mesh;
     case 'ferrari_f12':
       return createFerrariF12Model().mesh;
+    case 'delorean':
+    case 'delorean_time_machine':
+      return createDeLoreanTimeMachineModel().mesh;
     case 'homer_sedan':
     case 'pink_sedan':
     case 'simpsons_family_sedan':
@@ -4526,6 +4781,12 @@ export function createPopCultureCameoNPC(kind: string): THREE.Group {
   // These are intentionally authored as distinct silhouettes rather than generic bodies
   // with name labels. Research cues are translated into hair, grooming, proportions and
   // era-appropriate clothing while keeping the game's procedural/browser-friendly format.
+  if (k === 'doc_brown') {
+    return createDocBrownNPC();
+  }
+  if (k === 'marty_mcfly') {
+    return createMartyMcFlyNPC();
+  }
   if (k === 'jeffrey_epstein') {
     const r = createDetailedPublicFigureBase({
       name: 'npc_jeffrey_epstein', skin: 0xd9b090, top: 0x202a3a, trousers: 0x1a2230,
@@ -6210,6 +6471,9 @@ export const createBmwG80M3 = () => createBMWG80M3Model().mesh;
 export const createBmwF90M5 = () => createBMWF90M5Model().mesh;
 export const createLamborghiniAventador = () => createLamborghiniAventadorModel().mesh;
 export const createFerrariF12 = () => createFerrariF12Model().mesh;
+export const createDeLoreanTimeMachine = () => createDeLoreanTimeMachineModel().mesh;
+export const createDocBrown = () => createDocBrownNPC();
+export const createMartyMcFly = () => createMartyMcFlyNPC();
 export const createPoliceCrownVic = () => createPoliceCruiserModel();
 export const createPoliceCharger = () => createPoliceSUVModel();
 export const createSimpsonsFamilySedan = () => createPinkSedanModel();

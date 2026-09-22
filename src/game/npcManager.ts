@@ -226,6 +226,20 @@ const HIT_LINES = [
 // feel like skins rather than characters. Keep each line short enough for an NPC
 // bubble and give every cameo at least two recognisable/personality-matched options.
 const CROSSOVER_DIALOGUES: Record<string, string[]> = {
+  doc_brown: [
+    'Great Scott! 1.21 Gigawatts of electricity needed!',
+    "If you're gonna build a time machine into a car, why not do it with some style?",
+    "The Flux Capacitor is what makes time travel possible.",
+    "Roads? Where we're going, we don't need roads!",
+    "When this baby hits 88 miles per hour... you're gonna see some serious stuff!",
+  ],
+  marty_mcfly: [
+    'This is heavy, Doc!',
+    'Wait a minute, Doc... Are you telling me you built a time machine... out of a DeLorean?!',
+    'Whoa... check out that brushed stainless steel body!',
+    "Doc, we don't have enough road to get up to 88!",
+    'Hey, nobody calls me chicken!',
+  ],
   donald_trump: ['This city has tremendous traffic. Nobody has traffic like this.', 'That is a very, very fast car.', 'Somebody needs to fix these roads.'],
   barack_obama: ['Let me be clear: that Pikachu is definitely speeding.', 'That is a pretty unusual motorcade.', 'I was promised a quiet walk today.'],
   peter_griffin: ['Hehehehe. This is worse than that time I got chased by a Charizard.', 'Road House.', 'Lois is never going to believe this.'],
@@ -2056,6 +2070,9 @@ export class NPCManager {
       // to the ordinary pedestrian AI. Do not mark him as a generic always-flying NPC.
       { id:'iron_man', name:'Iron Man', kind:'iron_man', city:'golden', x:252, z:104, weight:1.4 },
       { id:'baymax', name:'Baymax', kind:'baymax', city:'golden', x:252, z:-48, weight:1.6, bounds:{ minX:238, maxX:270, minZ:-62, maxZ:-20 } },
+      // Back to the Future 1.21 Gigawatts Duo - standing right by the DeLorean Time Machine!
+      { id:'doc_brown', name:'Doc Brown', kind:'doc_brown', city:'golden', x:163, z:-102, weight:1.05 },
+      { id:'marty_mcfly', name:'Marty McFly', kind:'marty_mcfly', city:'golden', x:167, z:-102, weight:0.95 },
     ];
 
     for (const spec of crossoverSpecs) {

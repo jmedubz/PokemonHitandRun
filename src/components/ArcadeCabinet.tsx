@@ -257,12 +257,12 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
 
   if (ModularComponent) {
     return (
-      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 select-none overflow-hidden p-2 md:p-6 font-mono">
-        <div className="relative w-full max-w-5xl h-full max-h-[92vh] flex flex-col rounded-3xl border-8 border-purple-900 bg-slate-950 shadow-[0_0_80px_rgba(168,85,247,0.45)] overflow-hidden">
-          <div className="flex-1 relative overflow-hidden">
+      <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 select-none overflow-hidden p-0 sm:p-2 md:p-6 font-mono">
+        <div className="relative w-full max-w-5xl h-full sm:max-h-[92vh] flex flex-col sm:rounded-3xl border-0 sm:border-8 border-purple-900 bg-slate-950 shadow-[0_0_80px_rgba(168,85,247,0.45)] overflow-hidden">
+          <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
             <ModularComponent onExit={onExit} machineName={machineName || mod.title} />
           </div>
-          <div className="px-6 py-2.5 bg-gradient-to-r from-slate-950 via-purple-950 to-slate-950 border-t-2 border-purple-500/40 flex items-center justify-between text-xs text-slate-400">
+          <div className="px-6 py-2 bg-gradient-to-r from-slate-950 via-purple-950 to-slate-950 border-t-2 border-purple-500/40 hidden md:flex items-center justify-between text-xs text-slate-400 shrink-0">
             <div className="flex items-center gap-3">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="font-semibold text-slate-300">MAIN GAME STATUS:</span>
@@ -925,50 +925,65 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
   }, [gameState, highScore]);
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 select-none overflow-hidden p-2 md:p-6 font-mono">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 select-none overflow-hidden p-0 sm:p-2 md:p-6 font-mono">
       {/* Outer Arcade Cabinet Chassis */}
-      <div className="relative w-full max-w-5xl h-full max-h-[92vh] flex flex-col rounded-3xl border-8 border-purple-900 bg-slate-950 shadow-[0_0_80px_rgba(168,85,247,0.45)] overflow-hidden">
+      <div className="relative w-full max-w-5xl h-full sm:max-h-[92vh] flex flex-col sm:rounded-3xl border-0 sm:border-8 border-purple-900 bg-slate-950 shadow-[0_0_80px_rgba(168,85,247,0.45)] overflow-hidden">
         
         {/* Top Marquee Banner */}
-        <div className="relative flex items-center justify-between px-6 py-3 bg-gradient-to-r from-fuchsia-950 via-purple-900 to-fuchsia-950 border-b-4 border-amber-400 shadow-lg">
-          <div className="flex items-center gap-3">
-            <span className="inline-block w-3 h-3 rounded-full bg-red-500 animate-ping" />
-            <div className="text-sm md:text-xl font-black uppercase tracking-[0.25em] text-amber-300 drop-shadow-[0_2px_10px_rgba(245,158,11,0.8)]">
+        <div className="relative flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-fuchsia-950 via-purple-900 to-fuchsia-950 border-b-4 border-amber-400 shadow-lg shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
+            <div className="text-xs sm:text-lg md:text-xl font-black uppercase tracking-wider text-amber-300 drop-shadow-[0_2px_10px_rgba(245,158,11,0.8)] truncate">
               ★ {machineName} ★
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <button
-              onClick={() => setScanlines(!scanlines)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setScanlines((prev) => !prev);
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
               onTouchEnd={(e) => {
                 e.preventDefault();
-                setScanlines(!scanlines);
+                e.stopPropagation();
+                setScanlines((prev) => !prev);
               }}
-              className="min-h-[36px] flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer"
+              className="min-h-[38px] flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer touch-manipulation select-none"
               title="Toggle CRT Scanline Effect"
             >
               <Tv className="w-3.5 h-3.5" />
-              {scanlines ? 'CRT: ON' : 'CRT: OFF'}
+              <span className="hidden xs:inline">{scanlines ? 'CRT ON' : 'CRT OFF'}</span>
             </button>
             <button
-              onClick={() => setMuted(!muted)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMuted((prev) => !prev);
+              }}
+              onTouchStart={(e) => e.stopPropagation()}
               onTouchEnd={(e) => {
                 e.preventDefault();
-                setMuted(!muted);
+                e.stopPropagation();
+                setMuted((prev) => !prev);
               }}
-              className="min-h-[36px] flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer"
+              className="min-h-[38px] flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg border border-purple-400/40 bg-purple-950/60 text-purple-200 hover:bg-purple-800 active:bg-purple-700 transition cursor-pointer touch-manipulation select-none"
               title="Toggle 8-Bit Audio"
             >
               {muted ? <VolumeX className="w-3.5 h-3.5 text-red-400" /> : <Volume2 className="w-3.5 h-3.5 text-emerald-400" />}
-              {muted ? 'MUTED' : 'AUDIO'}
+              <span>{muted ? 'MUTED' : 'AUDIO'}</span>
             </button>
             <button
-              onClick={() => {
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
                 synthRef.current?.stopEngine();
                 synthRef.current?.stopChiptuneBGM();
                 onExit();
               }}
+              onTouchStart={(e) => e.stopPropagation()}
               onTouchEnd={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -976,10 +991,11 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
                 synthRef.current?.stopChiptuneBGM();
                 onExit();
               }}
-              className="min-h-[44px] min-w-[44px] flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-lg border-2 border-red-500 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs shadow-[0_0_15px_rgba(239,68,68,0.7)] transition cursor-pointer"
+              className="min-h-[44px] min-w-[44px] flex items-center gap-1 px-3 sm:px-4 py-1.5 rounded-lg border-2 border-red-500 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-bold text-xs shadow-[0_0_15px_rgba(239,68,68,0.7)] transition cursor-pointer touch-manipulation select-none"
+              title="Exit Arcade"
             >
               <X className="w-4 h-4" />
-              <span className="hidden xs:inline">EXIT</span>
+              <span>EXIT</span>
             </button>
           </div>
         </div>
@@ -1130,7 +1146,7 @@ export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineNam
         </div>
 
         {/* Bottom Cabinet Bezel Control Deck */}
-        <div className="px-6 py-2.5 bg-gradient-to-r from-slate-950 via-purple-950 to-slate-950 border-t-2 border-purple-500/40 flex items-center justify-between text-xs text-slate-400">
+        <div className="px-6 py-2 bg-gradient-to-r from-slate-950 via-purple-950 to-slate-950 border-t-2 border-purple-500/40 hidden md:flex items-center justify-between text-xs text-slate-400 shrink-0">
           <div className="flex items-center gap-3">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="font-semibold text-slate-300">MAIN GAME STATUS:</span>

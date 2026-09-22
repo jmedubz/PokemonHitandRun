@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArcadeGameProps } from '../types';
-import { Volume2, VolumeX, RotateCcw, X, Zap, Shield, Bomb, ChevronRight, Award, Crosshair, Trophy } from 'lucide-react';
+import { Volume2, VolumeX, RotateCcw, X, Zap, Shield, Bomb, ChevronRight, Award, Crosshair, Trophy, Pause, Play } from 'lucide-react';
 
 interface Invader {
   x: number;
@@ -104,9 +104,12 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
   const [bossHpPercent, setBossHpPercent] = useState<number | null>(null);
   const [gameState, setGameState] = useState<'playing' | 'sector_clear' | 'gameover'>('playing');
   const [soundMuted, setSoundMuted] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const soundMutedRef = useRef(false);
   soundMutedRef.current = soundMuted;
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
   const keysRef = useRef<Record<string, boolean>>({});
   const audioCtxRef = useRef<AudioContext | null>(null);
   const restartRef = useRef<() => void>(() => {});
@@ -446,6 +449,9 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
     // Keyboard handlers
     const onKeyDown = (e: KeyboardEvent) => {
       keysRef.current[e.code] = true;
+      if (e.code === 'KeyP') {
+        setIsPaused((prev) => !prev);
+      }
       if ((e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') && currentLives <= 0) {
         resetGame();
       }
@@ -467,6 +473,12 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
     let formationPhase = 0;
 
     const loop = (now: number) => {
+      if (isPausedRef.current) {
+        lastTime = now;
+        animId = requestAnimationFrame(loop);
+        return;
+      }
+
       const dt = Math.min((now - lastTime) / 1000, 0.08);
       lastTime = now;
 
@@ -1234,24 +1246,51 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
           </div>
 
           <button
-            onClick={() => setSoundMuted(!soundMuted)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSoundMuted((prev) => !prev);
+            }}
+            className="p-1.5 min-h-[38px] min-w-[38px] rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 transition cursor-pointer touch-manipulation select-none flex items-center justify-center"
             title="Toggle Sound"
           >
-            {soundMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
+            {soundMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4 text-cyan-400" />}
           </button>
 
           <button
-            onClick={() => restartRef.current()}
-            className="px-2.5 py-1.5 rounded-xl bg-cyan-800 hover:bg-cyan-700 text-xs font-bold transition flex items-center gap-1"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsPaused((prev) => !prev);
+            }}
+            className="px-2.5 py-1.5 min-h-[38px] rounded-xl bg-purple-900/80 hover:bg-purple-800 active:bg-purple-700 text-purple-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-purple-500/40 touch-manipulation select-none"
+            title="Pause / Resume Game"
+          >
+            {isPaused ? <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" /> : <Pause className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />}
+            <span className="hidden xs:inline">{isPaused ? 'Resume' : 'Pause'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsPaused(false);
+              restartRef.current();
+            }}
+            className="px-2.5 py-1.5 min-h-[38px] rounded-xl bg-cyan-800 hover:bg-cyan-700 active:bg-cyan-600 text-xs font-bold transition flex items-center gap-1 cursor-pointer touch-manipulation select-none"
+            title="Reset Game"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span className="hidden xs:inline">Reset</span>
           </button>
 
           <button
-            onClick={onExit}
-            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-black transition shadow flex items-center gap-1 cursor-pointer"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onExit();
+            }}
+            className="min-h-[44px] min-w-[44px] px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-black text-xs transition shadow flex items-center gap-1 cursor-pointer touch-manipulation select-none"
             title="Exit Cabinet"
           >
             <X className="w-4 h-4" />
@@ -1261,12 +1300,12 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
       </div>
 
       {/* Main Playfield */}
-      <div className="flex-1 relative flex items-center justify-center bg-black p-2 min-h-0">
+      <div className="flex-1 relative flex items-center justify-center bg-black p-0.5 sm:p-2 min-h-0">
         <canvas
           ref={canvasRef}
           width={540}
           height={640}
-          className="max-h-full max-w-full aspect-[27/32] rounded-xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.3)] bg-slate-950 object-contain"
+          className="w-full h-full max-w-full max-h-full aspect-[27/32] rounded-xl border-2 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.3)] bg-slate-950 object-contain"
         />
 
         {/* In-Game HUD overlay elements */}
@@ -1303,6 +1342,45 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
             </div>
           </div>
         </div>
+
+        {/* INTERACTIVE PAUSED OVERLAY */}
+        {isPaused && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/85 p-4 z-30 backdrop-blur-xs">
+            <div className="max-w-xs w-full bg-neutral-900 border-2 border-purple-500/80 rounded-2xl p-6 text-center shadow-[0_0_50px_rgba(168,85,247,0.4)]">
+              <Pause className="w-12 h-12 text-cyan-400 mx-auto mb-2 animate-pulse" />
+              <h2 className="text-2xl font-black text-cyan-300 tracking-wider">GAME PAUSED</h2>
+              <p className="text-xs text-neutral-400 mt-1 mb-6">Defenders resting in deep space...</p>
+              <div className="flex flex-col gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsPaused(false)}
+                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-black text-sm cursor-pointer shadow flex items-center justify-center gap-2 touch-manipulation select-none"
+                >
+                  <Play className="w-4 h-4 fill-white" />
+                  <span>RESUME GAME</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPaused(false);
+                    restartRef.current();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-bold text-xs cursor-pointer shadow flex items-center justify-center gap-1.5 touch-manipulation select-none"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>RESTART SECTOR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onExit}
+                  className="w-full py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 text-neutral-300 font-bold text-xs cursor-pointer shadow border border-neutral-700 touch-manipulation select-none"
+                >
+                  EXIT TO ARCADE
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Boss HP Bar */}
         {bossHpPercent !== null && (
@@ -1350,14 +1428,31 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
                 <div className="text-slate-400">Sector Reached: <span className="text-cyan-400 font-bold">{sector}</span></div>
                 <div className="text-amber-400 font-black text-sm pt-1">SCORE: {score}</div>
               </div>
-              <button
-                type="button"
-                onClick={() => restartRef.current()}
-                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-neutral-950 font-black text-sm cursor-pointer shadow flex items-center justify-center gap-1.5 transition"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>ENGAGE AGAIN</span>
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => restartRef.current()}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    restartRef.current();
+                  }}
+                  className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-neutral-950 font-black text-sm cursor-pointer shadow flex items-center justify-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>ENGAGE AGAIN</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onExit}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    onExit();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 font-bold text-xs cursor-pointer shadow"
+                >
+                  EXIT TO ARCADE
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1370,14 +1465,31 @@ export const GalaxyDefenderGame: React.FC<ArcadeGameProps> = ({ onExit, machineN
               <h2 className="text-2xl font-black text-cyan-300 tracking-wider">COSMIC VICTORY!</h2>
               <p className="text-xs text-slate-200 mt-1">Dreadnought flagship destroyed! All 4 galaxy sectors liberated!</p>
               <div className="my-4 text-xl font-black text-amber-400">FINAL SCORE: {score}</div>
-              <button
-                type="button"
-                onClick={() => restartRef.current()}
-                className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-neutral-950 font-black text-sm cursor-pointer shadow flex items-center justify-center gap-1.5 transition"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>PLAY AGAIN</span>
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => restartRef.current()}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    restartRef.current();
+                  }}
+                  className="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-neutral-950 font-black text-sm cursor-pointer shadow flex items-center justify-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>PLAY AGAIN</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onExit}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    onExit();
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 font-bold text-xs cursor-pointer shadow"
+                >
+                  EXIT TO ARCADE
+                </button>
+              </div>
             </div>
           </div>
         )}

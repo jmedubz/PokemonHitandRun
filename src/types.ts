@@ -44,7 +44,8 @@ export type VehicleModelType =
   | 'peppa_family_car'
   | 'arcade_visitor_sports'
   | 'arcade_visitor_convertible'
-  | 'arcade_visitor_suv';
+  | 'arcade_visitor_suv'
+  | 'delorean_time_machine';
 
 export interface Vehicle {
   id: string;

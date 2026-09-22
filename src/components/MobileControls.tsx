@@ -994,7 +994,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       </div>
 
         {/* Top-Right: Quick Action Icons (Mute, Reset, Pause) */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        <div className="flex items-center gap-2 pointer-events-auto z-40">
           <button
             type="button"
             id="mobile-btn-mute"
@@ -1002,10 +1002,18 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               e.stopPropagation();
               onToggleMute();
             }}
-            className="w-10 h-10 rounded-full border border-slate-600/70 bg-slate-950/80 flex items-center justify-center text-slate-200 shadow-md backdrop-blur-md active:bg-slate-800 cursor-pointer"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleMute();
+            }}
+            className="w-10 h-10 rounded-full border border-slate-600/70 bg-slate-950/90 flex items-center justify-center text-slate-200 shadow-md backdrop-blur-md active:bg-slate-800 cursor-pointer touch-manipulation select-none"
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-slate-200" />}
+            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
           </button>
 
           <button
@@ -1015,10 +1023,18 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               e.stopPropagation();
               onResetPlayer();
             }}
-            className="w-10 h-10 rounded-full border border-amber-400/40 bg-slate-950/80 flex items-center justify-center text-amber-300 shadow-md backdrop-blur-md active:bg-amber-500/20 cursor-pointer"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onResetPlayer();
+            }}
+            className="w-10 h-10 rounded-full border border-amber-400/60 bg-slate-950/90 flex items-center justify-center text-amber-300 shadow-md backdrop-blur-md active:bg-amber-500/20 cursor-pointer touch-manipulation select-none"
             title="Reset position"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-4 h-4 text-amber-400" />
           </button>
 
           {/* PAUSE BUTTON (ESC equivalent) */}
@@ -1029,7 +1045,15 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               e.stopPropagation();
               onTogglePause();
             }}
-            className="h-10 px-3.5 rounded-full border border-amber-400/70 bg-slate-950/90 flex items-center gap-1.5 text-amber-300 shadow-lg backdrop-blur-md active:bg-amber-400/20 cursor-pointer"
+            onTouchStart={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onTogglePause();
+            }}
+            className="h-10 px-3.5 rounded-full border-2 border-amber-400 bg-slate-950/95 flex items-center gap-1.5 text-amber-300 shadow-lg backdrop-blur-md active:bg-amber-400/30 cursor-pointer touch-manipulation select-none"
             title="Pause Game"
           >
             <Pause className="w-4 h-4 text-amber-400 fill-amber-400" />

@@ -75,8 +75,18 @@ const renderMiniRoad = (road: WorldMapRoadFeature) => {
 export function cleanPromptForMobile(text: string | null): string | null {
   if (!text) return null;
   const cleaned = text
-    .replace(/\[(?:E|F|G|Q|H|W|A|S|D|SPACE|SHIFT|ENTER|ESC|W\/S|A\/D|←\/→|↑\/↓)\]\s*/gi, '')
+    .replace(/Press G(?: again)? to throw/gi, 'Tap Throw to throw')
+    .replace(/Press E to bail out/gi, 'Tap Exit to bail out')
+    .replace(/Press E to choose/gi, 'Tap Action to choose')
+    .replace(/Press SPACE whenever you want to redeploy/gi, 'Tap Deploy whenever you want to redeploy')
+    .replace(/Press SPACE to redeploy/gi, 'Tap Deploy to redeploy')
+    .replace(/Press ([A-Za-z0-9]+)/gi, 'Tap Action')
+    .replace(/\[(?:E|F|G|Q|H|W|A|S|D|SPACE|SHIFT|ENTER|ESC|TAB|W\/S|A\/D|←\/→|↑\/↓|LMB\s+DRAG)\]\s*/gi, '')
     .replace(/\[[A-Z0-9/←→↑↓\s]+\]\s*/g, '')
+    .replace(/\bTAB\b/gi, 'Map')
+    .replace(/\bWASD\b/gi, 'Joystick')
+    .replace(/Joystick \/ W\/S to fly • Space climb • Shift descend/gi, 'Use Joystick to steer • Fly Up to climb • Descend to lower')
+    .replace(/W\/S controls speed, A\/D turns, Space climbs and Shift descends/gi, 'Use Joystick to steer, Fly Up to climb and Descend to lower')
     .replace(/(^|\s)•\s*•/g, ' •')
     .replace(/^\s*•\s*/, '')
     .replace(/\s*•\s*$/, '')
@@ -687,17 +697,25 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           <div className="flex items-start gap-2.5 mt-3.5">
             {/* COMPACT MINIMAP: Simpsons Hit & Run Style with Outer Gauge & Police Siren */}
           <div className="flex flex-col items-center">
-            <div
+            <button
+              type="button"
               id="mobile-minimap-btn"
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenBigMap();
               }}
-              className="relative rounded-full border-2 border-slate-700/80 bg-slate-950 p-1.5 shadow-2xl backdrop-blur-md cursor-pointer group active:scale-95 transition-transform"
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenBigMap();
+              }}
+              className="relative rounded-full border-2 border-slate-700/80 bg-slate-950 p-1.5 shadow-2xl backdrop-blur-md cursor-pointer group active:scale-95 transition-transform pointer-events-auto touch-manipulation z-30 block text-left"
               style={{ width: `${miniMapSize + 16}px`, height: `${miniMapSize + 16}px` }}
               title="Tap to open full world map"
-              role="button"
-              tabIndex={0}
+              aria-label="Open full world map"
             >
               {/* Police Siren Light Bar Fixture on Top (12 o'clock) - Simpsons Hit & Run Style */}
               <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center justify-center">
@@ -902,11 +920,33 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                 <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[6.5px] font-black uppercase text-white/90 bg-black/70 px-1 py-0.2 rounded pointer-events-none whitespace-nowrap">
                   {currentDistrict}
                 </div>
-                <div className="absolute bottom-0 inset-x-0 bg-black/80 text-[6px] font-bold text-center text-amber-300 py-0.2 pointer-events-none uppercase tracking-wider">
-                  Tap for Map
+                <div className="absolute bottom-0 inset-x-0 bg-black/85 text-[7px] font-black text-center text-amber-300 py-0.5 pointer-events-none uppercase tracking-wider flex items-center justify-center gap-0.5 shadow-xs">
+                  <span>🗺️ TAP MAP</span>
                 </div>
               </div>
-            </div>
+            </button>
+
+            {/* Explicit Quick Expand Map Pill for reliable single-tap on mobile */}
+            <button
+              type="button"
+              id="mobile-expand-map-pill"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenBigMap();
+              }}
+              onTouchStart={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenBigMap();
+              }}
+              className="mt-1 px-2.5 py-0.5 rounded-full bg-slate-950/90 border border-amber-400/80 text-amber-300 hover:bg-amber-500/20 active:scale-95 text-[8.5px] font-black uppercase tracking-wider pointer-events-auto touch-manipulation cursor-pointer flex items-center gap-1 shadow-md"
+              title="Open full world map"
+            >
+              <span>🗺️ MAP</span>
+            </button>
 
             {/* Hit & Run Heat Banner below minimap */}
             {wantedHeat > 0 && (
@@ -1241,7 +1281,24 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           ) : charizardFlightActive ? (
             /* CHARIZARD FLIGHT CONTROLS */
             <div className="flex items-end gap-2.5">
-              {/* Descend & Boost */}
+              {/* If holding someone while flying, show big bouncy THROW button */}
+              {grabbedNpcId && (
+                <div className="flex flex-col gap-2.5">
+                  <button
+                    type="button"
+                    id="btn-charizard-throw-npc"
+                    {...createButtonHandlers(() => {
+                      onAction('grab');
+                    })}
+                    className="w-14 h-14 rounded-full border-2 border-purple-400/90 bg-purple-600/80 active:bg-purple-600/95 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white animate-bounce pointer-events-auto active:scale-95 transition-transform"
+                  >
+                    <span className="text-base">🤾</span>
+                    <span className="text-[7.5px] font-black tracking-wider">THROW</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Descend & Flame */}
               <div className="flex flex-col gap-2.5">
                 <button
                   type="button"

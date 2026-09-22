@@ -771,7 +771,34 @@ export default function App() {
       window.clearTimeout(temporaryNotificationTimerRef.current);
     }
     const durationMs = 6000;
-    setTemporaryNotification({ id, speaker, text, duration: durationMs });
+    let formattedText = text;
+    if (controlMode === 'mobile') {
+      formattedText = text
+        .replace(/Press G(?: again)? to throw/gi, 'Tap Throw to throw')
+        .replace(/Press E to bail out/gi, 'Tap Exit to bail out')
+        .replace(/Press E to choose/gi, 'Tap Action to choose')
+        .replace(/Press SPACE whenever you want to redeploy/gi, 'Tap Deploy whenever you want to redeploy')
+        .replace(/Press SPACE to redeploy/gi, 'Tap Deploy to redeploy')
+        .replace(/Press E/gi, 'Tap Action')
+        .replace(/Press G/gi, 'Tap Throw')
+        .replace(/Press F/gi, 'Tap Kick')
+        .replace(/Press Q/gi, 'Tap Special')
+        .replace(/Press SPACE/gi, 'Tap Jump')
+        .replace(/Press TAB/gi, 'Tap Map')
+        .replace(/\[E\]/gi, 'Action')
+        .replace(/\[G\]/gi, 'Throw')
+        .replace(/\[F\]/gi, 'Kick')
+        .replace(/\[Q\]/gi, 'Special')
+        .replace(/\[H\]/gi, 'Horn')
+        .replace(/\[SPACE\]/gi, 'Jump')
+        .replace(/\[SHIFT\]/gi, 'Descend')
+        .replace(/\[TAB\]/gi, 'Map')
+        .replace(/Joystick \/ W\/S to fly • Space climb • Shift descend/gi, 'Use Joystick to steer • Fly Up to climb • Descend to lower')
+        .replace(/W\/S controls speed, A\/D turns, Space climbs and Shift descends/gi, 'Use Joystick to steer, Fly Up to climb and Descend to lower')
+        .replace(/E drops back into freefall, SPACE can redeploy it again/gi, 'CUT CHUTE drops back into freefall, DEPLOY can redeploy it again')
+        .replace(/\bTAB\b/g, 'Map');
+    }
+    setTemporaryNotification({ id, speaker, text: formattedText, duration: durationMs });
     temporaryNotificationTimerRef.current = window.setTimeout(() => {
       // Guard against an older timeout ever closing a newer replacement message.
       setTemporaryNotification((current) => (current?.id === id ? null : current));
@@ -4752,7 +4779,12 @@ export default function App() {
 
     const handleAttack = () => {
       const e = engineRef.current;
-      if (!e || !e.hasChosenStarter || e.activeVehicle || e.vehicleEntryActive || e.switchAnimator.active || e.healingActive || e.deathSequenceActive || e.hospitalRecoveryActive || e.toothlessMounted || e.toothlessMounting || e.milesInteractionActive || e.seated || e.grabbedNpcId) return;
+      if (!e || !e.hasChosenStarter || e.activeVehicle || e.vehicleEntryActive || e.switchAnimator.active || e.healingActive || e.deathSequenceActive || e.hospitalRecoveryActive || e.toothlessMounted || e.toothlessMounting || e.milesInteractionActive || e.seated) return;
+
+      if (e.grabbedNpcId) {
+        handleGrab();
+        return;
+      }
 
       const pPos = e.playerMovement.position;
       const forward = currentForward();
@@ -5808,7 +5840,7 @@ export default function App() {
         return;
       }
       if (e.grabbedNpcId) {
-        showTemporaryNotification('Grab', 'Press G again to throw the NPC before using other interactions.');
+        handleGrab();
         return;
       }
       if (e.toothlessMounted) {

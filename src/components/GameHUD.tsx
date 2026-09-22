@@ -1131,7 +1131,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <button
                 id="btn-open-big-map"
                 onClick={() => setShowBigMap(true)}
-                className="text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded transition flex items-center gap-1 shadow-sm"
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowBigMap(true);
+                }}
+                className="text-[10px] font-bold bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded transition flex items-center gap-1 shadow-sm cursor-pointer touch-manipulation"
                 title="Open full interactive map (Press TAB)"
               >
                 <Layers className="w-2.5 h-2.5" /> MAP [TAB]
@@ -1145,7 +1150,12 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <div
               id="interactive-minimap-container"
               onClick={() => setShowBigMap(true)}
-              className="relative bg-[#263d2f] rounded-xl overflow-hidden border border-slate-700 group/map cursor-pointer"
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowBigMap(true);
+              }}
+              className="relative bg-[#263d2f] rounded-xl overflow-hidden border border-slate-700 group/map cursor-pointer touch-manipulation pointer-events-auto select-none"
               style={{ width: `${mapWidth}px`, height: `${mapHeight}px` }}
               title="Local navigation radar. Click to expand full world map."
             >
@@ -1289,79 +1299,88 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           manually). The live Ash battle status panel is state-driven and remains
           visible for the duration of the battle.
       */}
-      {/* ---------------- ACTIVE DIALOGUE & ASH BATTLE BOSS HUD ---------------- */}
-      {((ashBattleState.isActive && ashBattleState.currentBoss) || activeDialogue) && (
+      {/* ---------------- ASH BATTLE BOSS HUD (TOP POSITION) ---------------- */}
+      {ashBattleState.isActive && ashBattleState.currentBoss && (
         <div
+          id="ash-battle-boss-hud"
+          className="fixed top-2 sm:top-3 left-1/2 -translate-x-1/2 z-[150] pointer-events-none flex justify-center w-[94vw] max-w-sm sm:max-w-md px-1 transition-all duration-200"
+        >
+          <div className="w-full bg-slate-950/95 border-2 border-red-500 rounded-xl px-3.5 py-2 shadow-[0_0_24px_rgba(239,68,68,0.45)] backdrop-blur-xl text-white">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm sm:text-base">🥊</span>
+                <span className="font-black text-xs sm:text-sm text-red-400 tracking-wide truncate">
+                  {ashBattleState.currentBoss.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-[9px] sm:text-[10px] font-bold text-yellow-300 uppercase tracking-wider bg-red-950/80 px-1.5 py-0.5 rounded border border-red-800 whitespace-nowrap">
+                  Ash's Team ({ashBattleState.currentBossIndex + 1}/7)
+                </span>
+              </div>
+            </div>
+            <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-red-900/80">
+              <div
+                className="h-full bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400 transition-all duration-150 rounded-full"
+                style={{
+                  width: `${Math.max(
+                    0,
+                    ((ashBattleState.currentBoss.hp ?? 0) / ashBattleState.currentBoss.maxHp) * 100
+                  )}%`,
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-1 text-[9px] sm:text-[10px] font-semibold text-slate-300">
+              <span className="truncate">Move: {ashBattleState.currentBoss.specialMove}</span>
+              <span className="whitespace-nowrap font-bold text-slate-200">
+                HP {formatHealth(ashBattleState.currentBoss.hp)}/{formatHealth(ashBattleState.currentBoss.maxHp)}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------- ACTIVE DIALOGUE LANE ---------------- */}
+      {activeDialogue && (
+        <div
+          id="hud-active-dialogue-lane"
           className={
             controlMode === 'mobile'
-              ? "fixed top-24 left-1/2 -translate-x-1/2 z-[135] pointer-events-none flex justify-center w-[92vw] max-w-md px-2"
+              ? (ashBattleState.isActive && ashBattleState.currentBoss
+                  ? "fixed top-24 left-1/2 -translate-x-1/2 z-[145] pointer-events-none flex justify-center w-[92vw] max-w-md px-2"
+                  : "fixed top-12 left-1/2 -translate-x-1/2 z-[145] pointer-events-none flex justify-center w-[92vw] max-w-md px-2")
               : "absolute z-40 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-center"
           }
           style={controlMode === 'mobile' ? undefined : persistentDialogueStyle}
         >
           <div className="w-full max-w-2xl flex flex-col items-center gap-2 pointer-events-auto">
-            {ashBattleState.isActive && ashBattleState.currentBoss && (
-              <div className="pointer-events-none w-full bg-slate-950/95 border-2 border-red-500 rounded-xl px-4 py-2.5 shadow-[0_0_24px_rgba(239,68,68,0.45)] backdrop-blur-xl text-white">
-                <div className="flex items-center justify-between gap-3 mb-1.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-base">🥊</span>
-                    <span className="font-black text-sm text-red-400 tracking-wide truncate">
-                      {ashBattleState.currentBoss.name}
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold text-yellow-300 uppercase tracking-wider bg-red-950/80 px-2 py-0.5 rounded border border-red-800 whitespace-nowrap">
-                    Ash Battle
-                  </span>
-                </div>
-                <div className="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-red-900/80">
-                  <div
-                    className="h-full bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400 transition-all duration-150 rounded-full"
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        ((ashBattleState.currentBoss.hp ?? 0) / ashBattleState.currentBoss.maxHp) * 100
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-3 mt-1 text-[10px] font-semibold text-slate-300">
-                  <span className="truncate">Move: {ashBattleState.currentBoss.specialMove}</span>
-                  <span className="whitespace-nowrap">
-                    HP {formatHealth(ashBattleState.currentBoss.hp)}/{formatHealth(ashBattleState.currentBoss.maxHp)}
-                  </span>
-                </div>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDismissDialogue();
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDismissDialogue();
+              }}
+              className="group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-amber-400 rounded-xl px-4 py-3 pr-10 shadow-2xl backdrop-blur-xl text-white text-left cursor-pointer hover:border-amber-300 active:scale-[0.99] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 overflow-hidden"
+              title="Tap / Click to dismiss dialogue"
+              aria-label={`Dismiss dialogue from ${activeDialogue.speaker}`}
+            >
+              <X className="absolute top-3 right-3 w-5 h-5 text-amber-300 group-hover:text-white transition" />
+              <div className="font-black text-xs text-amber-400 tracking-wide mb-1">
+                {activeDialogue.speaker}:
               </div>
-            )}
-
-            {activeDialogue && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDismissDialogue();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDismissDialogue();
-                }}
-                className="group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-amber-400 rounded-xl px-4 py-3 pr-10 shadow-2xl backdrop-blur-xl text-white text-left cursor-pointer hover:border-amber-300 active:scale-[0.99] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 overflow-hidden"
-                title="Tap / Click to dismiss dialogue"
-                aria-label={`Dismiss dialogue from ${activeDialogue.speaker}`}
-              >
-                <X className="absolute top-3 right-3 w-5 h-5 text-amber-300 group-hover:text-white transition" />
-                <div className="font-black text-xs text-amber-400 tracking-wide mb-1">
-                  {activeDialogue.speaker}:
-                </div>
-                <div className="text-sm font-semibold leading-snug text-slate-100 whitespace-normal break-words overflow-visible">
-                  "{activeDialogue.text}"
-                </div>
-                <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-amber-300/80 group-hover:text-amber-200 transition flex items-center gap-1">
-                  <span>Tap or click message to dismiss</span>
-                </div>
-                <div className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-amber-300/90" />
-              </button>
-            )}
+              <div className="text-sm font-semibold leading-snug text-slate-100 whitespace-normal break-words overflow-visible">
+                "{activeDialogue.text}"
+              </div>
+              <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-amber-300/80 group-hover:text-amber-200 transition flex items-center gap-1">
+                <span>Tap or click message to dismiss</span>
+              </div>
+              <div className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-amber-300/90" />
+            </button>
           </div>
         </div>
       )}
@@ -1369,7 +1388,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ---------------- COMPACT TOP TEMPORARY NOTIFICATION LANE ---------------- */}
       {temporaryNotification && (
         <div
-          className="fixed top-1 sm:top-1.5 left-1/2 -translate-x-1/2 z-[160] pointer-events-auto flex justify-center w-auto max-w-[90vw] sm:max-w-md px-1"
+          className={`fixed ${ashBattleState.isActive && ashBattleState.currentBoss ? 'top-20 sm:top-20' : 'top-1 sm:top-1.5'} left-1/2 -translate-x-1/2 z-[160] pointer-events-auto flex justify-center w-auto max-w-[90vw] sm:max-w-md px-1`}
         >
           <button
             key={temporaryNotification.id}

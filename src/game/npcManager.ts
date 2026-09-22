@@ -4547,12 +4547,11 @@ export class NPCManager {
     npc.position = { x: npc.mesh.position.x, y: npc.mesh.position.y, z: npc.mesh.position.z };
   }
 
-  public getNearbyNPC(playerPos: THREE.Vector3, range = 3.0): NPC | null {
+  public getNearbyNPC(playerPos: THREE.Vector3, range = 3.5): NPC | null {
     let closest: NPC | null = null;
     let minDistSq = range * range;
     for (const npc of this.npcs) {
       if (!npc.mesh.visible || this.isDeadBody(npc) || npc.state === 'knocked_out') continue;
-      if (this.isPedestrianTransitCritical(npc)) continue;
       const distSq = playerPos.distanceToSquared(npc.mesh.position);
       if (distSq < minDistSq) {
         minDistSq = distSq;
@@ -4562,13 +4561,12 @@ export class NPCManager {
     return closest;
   }
 
-  public getNPCInFront(origin: THREE.Vector3, forward: THREE.Vector3, range = 3.5, minDot = 0.15): NPC | null {
+  public getNPCInFront(origin: THREE.Vector3, forward: THREE.Vector3, range = 3.8, minDot = -0.15): NPC | null {
     let best: NPC | null = null;
     let bestScore = Infinity;
     const fwd = forward.clone().setY(0).normalize();
     for (const npc of this.npcs) {
       if (!npc.mesh.visible || this.isDeadBody(npc) || npc.state === 'knocked_out') continue;
-      if (this.isPedestrianTransitCritical(npc)) continue;
       const delta = npc.mesh.position.clone().sub(origin);
       const vertical = Math.abs(delta.y);
       delta.y = 0;
@@ -4776,21 +4774,13 @@ export class NPCManager {
     return high ? 'knockdown' : 'fall';
   }
 
-  /** Only ordinary ground NPCs can be picked up. Critical challenge actors, giant
-   * creatures, shopkeepers and already-scripted characters stay protected. */
+  /** Any NPC in the world can be grabbed and thrown by the player! */
   public canPlayerGrab(npc: NPC): boolean {
-    const mode = npc.movementMode ?? npc.mesh.userData.movementMode ?? 'ground';
-    const blockedIds = new Set([
-      'ash',
-      'jail_escape_guard',
-      'ash_defender_charizard',
-      'cameo_toothless',
-    ]);
-    if (!npc.mesh.visible || npc.state === 'defeated' || npc.state === 'knocked_out' || npc.state === 'kicked' || npc.state === 'recovering' || npc.state === 'grabbed') return false;
-    if (mode !== 'ground') return false;
-    if (npc.mesh.userData.stationary || npc.mesh.userData.specialInteractionActive || blockedIds.has(npc.id)) return false;
-    const weight = Math.max(0.45, npc.combatWeight ?? npc.mesh.userData.combatWeight ?? 1);
-    return weight <= 1.65;
+    if (!npc || !npc.mesh || !npc.mesh.visible) return false;
+    if (npc.state === 'defeated' || npc.state === 'grabbed') return false;
+    // Don't grab the toothless mount while riding it or the boss defender
+    if (npc.id === 'cameo_toothless' || npc.id === 'ash_defender_charizard') return false;
+    return true;
   }
 
   public beginPlayerGrab(npc: NPC): boolean {
@@ -4800,10 +4790,11 @@ export class NPCManager {
     npc.mesh.userData.specialInteractionActive = true;
     npc.mesh.userData.heldByPlayer = true;
     this.clearPedestrianRoute(npc);
-    npc.kickedVelocity?.set(0, 0, 0);
+    if (npc.kickedVelocity) npc.kickedVelocity.set(0, 0, 0);
     npc.state = 'grabbed';
     npc.walkTimer = 0;
-    this.say(npc, ['HEY!', 'PUT ME DOWN!', 'WHAT ARE YOU DOING?!'][Math.floor(Math.random() * 3)], 1.6);
+    const phrases = ['HEY!', 'PUT ME DOWN!', 'WHAT ARE YOU DOING?!', 'WHOA!', 'LET GO!', 'HEY WATCH IT!'];
+    this.say(npc, phrases[Math.floor(Math.random() * phrases.length)], 1.6);
     return true;
   }
 

@@ -10,6 +10,8 @@ export type ArcadeGameGenre =
   | 'Space Shooter'
   | 'Brawler / Fighting'
   | 'Classic Arcade'
+  | 'Maze / Chase'
+  | 'Brick Breaker'
   | 'Custom Imported';
 
 export interface ArcadeGameModule {

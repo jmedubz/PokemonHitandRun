@@ -310,6 +310,7 @@ type EngineState = {
   grabStartPosition: THREE.Vector3 | null;
   grabThrowPoseTimer: number;
   grabThrowQueued: boolean;
+  grabThrowLockoutUntil: number;
 };
 
 const SAVE_INTERVAL = 10;
@@ -2510,6 +2511,7 @@ export default function App() {
       current.grabStartPosition = null;
       current.grabThrowPoseTimer = 0;
       current.grabThrowQueued = false;
+      current.grabThrowLockoutUntil = 0;
       clearPlayerGrabPose(current.playerMesh);
     };
 
@@ -3349,6 +3351,7 @@ export default function App() {
       grabStartPosition: null,
       grabThrowPoseTimer: 0,
       grabThrowQueued: false,
+      grabThrowLockoutUntil: 0,
     };
     engineRef.current = engine;
 
@@ -3776,29 +3779,32 @@ export default function App() {
       if (!e || !e.hasChosenStarter || e.deathSequenceActive || e.hospitalRecoveryActive || e.healingActive || e.switchAnimator.active) return;
 
       if (e.grabbedNpcId) {
-        // Prevent accidental instant throw right after grabbing (e.g. touch tap double-fire)
-        if (e.grabLiftTimer < 0.32) return;
+        // Prevent accidental instant throw right after grabbing
+        if (Date.now() < (e.grabThrowLockoutUntil ?? 0)) return;
         if (!e.grabThrowQueued) {
           e.grabThrowQueued = true;
           e.grabThrowPoseTimer = 0.62;
           e.grabLiftTimer = e.grabLiftDuration;
+          playSoundEffect('click');
         }
         return;
       }
 
       if (e.seated || e.activeVehicle || e.vehicleEntryActive || e.trainRideActive || e.elevatorRideActive || e.toothlessMounted || e.toothlessMounting || e.milesInteractionActive || e.ashBattle.state.isActive) return;
       const forward = new THREE.Vector3(Math.sin(e.playerMovement.yaw), 0, Math.cos(e.playerMovement.yaw));
-      const npc = e.npcManager.getNPCInFront(e.playerMovement.position, forward, 2.45, -0.05) ?? e.npcManager.getNearbyNPC(e.playerMovement.position, 1.75);
+      const npc = e.npcManager.getNPCInFront(e.playerMovement.position, forward, 3.8, -0.25) ?? e.npcManager.getNearbyNPC(e.playerMovement.position, 3.2);
       if (!npc || !e.npcManager.canPlayerGrab(npc)) {
-        showTemporaryNotification('Grab', 'Move closer to an ordinary ground NPC and press G.');
+        showTemporaryNotification('Grab', 'Move closer to any NPC and tap Grab.');
         return;
       }
       if (!e.npcManager.beginPlayerGrab(npc)) return;
       e.grabbedNpcId = npc.id;
+      setGrabbedNpcId(npc.id);
       e.grabLiftTimer = 0;
       e.grabStartPosition = npc.mesh.position.clone();
       e.grabThrowQueued = false;
       e.grabThrowPoseTimer = 0;
+      e.grabThrowLockoutUntil = Date.now() + 300; // 300ms debounce prevents accidental double-tap throw
       e.playerMovement.velocity.x *= 0.35;
       e.playerMovement.velocity.z *= 0.35;
       playSoundEffect('click');
@@ -6312,7 +6318,7 @@ export default function App() {
       }
       if (engine.grabbedNpcId) {
         const held = engine.npcManager.getNPCById(engine.grabbedNpcId);
-        setInteractionPrompt(`[G] Throw ${held?.name ?? 'NPC'}  •  two-hand throw-in`);
+        setInteractionPrompt(`[G] Throw ${held?.name ?? 'NPC'}`);
         return;
       }
       if (engine.parachuteController) {
@@ -7949,7 +7955,9 @@ export default function App() {
         }
       }
       if (event.code === 'KeyF') handleAttack();
-      if (event.code === 'KeyG') handleGrab();
+      if (event.code === 'KeyG') {
+        if (!event.repeat) handleGrab();
+      }
       if (event.code === 'KeyQ') performInstantSpecial();
       // Number-key Pokémon shortcuts do not exist until the starter has been
       // confirmed. Do not even dispatch a switch request during the intro state.
@@ -8159,9 +8167,35 @@ export default function App() {
       } else if (action === 'special') {
         performInstantSpecial();
       } else if (action === 'chute_deploy') {
-        if (activeInputEngine.parachuteController && activeInputEngine.parachuteController.mode === 'freefall') {
-          if (activeInputEngine.parachuteController.deploy()) {
-            showTemporaryNotification('Parachute', 'Canopy deployed — CUT CHUTE drops back into freefall.');
+        if (activeInputEngine.parachuteController) {
+          if (activeInputEngine.parachuteController.mode === 'freefall') {
+            if (activeInputEngine.parachuteController.deploy()) {
+              showTemporaryNotification('Parachute', 'Canopy deployed — CUT CHUTE drops back into freefall.');
+            }
+          }
+        } else {
+          const groundY = activeInputEngine.collisionSystem.getGroundHeightNear(
+            activeInputEngine.playerMovement.position.x,
+            activeInputEngine.playerMovement.position.z,
+            activeInputEngine.playerMovement.position.y,
+            0.12, 1.2, 400
+          );
+          const altitude = activeInputEngine.playerMovement.position.y - groundY;
+          if (!activeInputEngine.playerMovement.isGrounded || altitude > 1.6 || activeInputEngine.playerMovement.velocity.y < -2.0) {
+            activeInputEngine.playerMovement.isGrounded = false;
+            activeInputEngine.parachuteController = new ParachuteController(
+              activeInputEngine.scene,
+              activeInputEngine.playerMovement.velocity,
+              activeInputEngine.playerMovement.yaw
+            );
+            activeInputEngine.parachuteController.deploy();
+            setParachuteHud({
+              mode: 'parachute',
+              altitude: Math.max(0, altitude),
+              verticalSpeed: activeInputEngine.playerMovement.velocity.y,
+              deployment: 0.95,
+            });
+            showTemporaryNotification('Parachute', 'Canopy deployed!');
           }
         }
       } else if (action === 'jump') {
@@ -9312,39 +9346,36 @@ export default function App() {
         e.vehicleExitTumbleTimer > 0 ||
         !!starterSelectionCandidateRef.current ||
         bustedRef.current;
-      // Playable Charizard uses a deliberate two-press flow:
-      // 1st fresh Space press on valid ground -> ordinary gravity-driven jump.
-      // 2nd fresh Space press while still airborne from THAT jump -> flight mode.
-      // Requiring jumpsUsed === 1 prevents kerbs, tiny falls, knockback and physics
-      // bumps from ever arming flight accidentally.
+      // Playable Charizard takeoff flow:
+      // Jump from ground, then press Jump again in air (or tap JUMP/FLY on mobile) to spread wings and engage flight!
       const charizardSpaceHeld = !!keys['Space'];
       const charizardSpacePressed = charizardSpaceHeld && !e.charizardSpaceWasHeld;
       e.charizardSpaceWasHeld = charizardSpaceHeld;
+      const analog = analogInputStateRef.current;
       if (
         e.currentPokemonId === 'charizard' &&
         !e.charizardFlightActive &&
         !movementLocked &&
         charizardSpacePressed &&
-        !e.playerMovement.isGrounded &&
-        e.playerMovement.jumpsUsed === 1 &&
+        (!e.playerMovement.isGrounded || e.playerMovement.jumpsUsed >= 1) &&
         !e.playerMovement.isStomping
       ) {
-        // Do not teleport upward. Flight inherits the real jump's current vertical
-        // momentum and only changes control/gravity mode once there is enough room
-        // for Charizard's body/wings to occupy the next small flight volume.
+        // Do not teleport upward. Flight inherits current momentum and engages fluidly.
         const current = e.playerMovement.position.clone();
         const clearanceProbe = current.clone().add(new THREE.Vector3(0, 0.28, 0));
         if (e.collisionSystem.canFlyOccupy(clearanceProbe, 0.82, 2.72)) {
           e.charizardFlightActive = true;
-          e.charizardFlightSpeed = Math.max(0, Math.hypot(e.playerMovement.velocity.x, e.playerMovement.velocity.z));
-          e.charizardVerticalSpeed = Math.max(1.2, e.playerMovement.velocity.y);
+          const currentPlanarSpeed = Math.hypot(e.playerMovement.velocity.x, e.playerMovement.velocity.z);
+          const hasForwardInput = !!keys['KeyW'] || !!keys['ArrowUp'] || (analog.active && -analog.y > 0.2);
+          e.charizardFlightSpeed = hasForwardInput ? Math.max(16.0, currentPlanarSpeed) : Math.max(4.0, currentPlanarSpeed);
+          e.charizardVerticalSpeed = Math.max(2.5, e.playerMovement.velocity.y);
           e.playerMovement.velocity.y = e.charizardVerticalSpeed;
           e.playerMovement.isGrounded = false;
           e.playerMovement.isStomping = false;
           e.playerMesh.userData.charizardFlying = true;
           e.playerMesh.userData.charizardJumpPreparing = false;
           playSoundEffect('doubleJump');
-          showTemporaryNotification('Charizard', 'Flight engaged: W/S speed • A/D turn • Space climb • Shift descend/land');
+          showTemporaryNotification('Charizard', 'Flight engaged: Joystick / W/S to fly • Space climb • Shift descend');
         } else {
           const now = performance.now() * 0.001;
           if (now >= Number(e.playerMesh.userData.takeoffBlockedUntil ?? 0)) {
@@ -9354,7 +9385,6 @@ export default function App() {
         }
       }
 
-      const analog = analogInputStateRef.current;
       const pInputs: PlayerInputs = {
         forward: !movementLocked && (!!keys['KeyW'] || !!keys['ArrowUp']),
         backward: !movementLocked && (!!keys['KeyS'] || !!keys['ArrowDown']),
@@ -10168,13 +10198,34 @@ export default function App() {
           const rightHeld = !!keys['KeyD'] || !!keys['ArrowRight'];
           const ascendHeld = !!keys['Space'];
           const descendHeld = !!keys['ShiftLeft'] || !!keys['ShiftRight'];
+          const analog = analogInputStateRef.current;
 
-          const targetSpeed = forwardHeld && !backHeld ? 22.0 : backHeld && !forwardHeld ? -5.0 : 0.0;
+          // Process both keyboard and mobile analog joystick inputs
+          let forwardFactor = (forwardHeld ? 1 : 0) - (backHeld ? 1 : 0);
+          let turnInput = (leftHeld ? 1 : 0) - (rightHeld ? 1 : 0);
+
+          if (analog.active && analog.magnitude > 0.05) {
+            // analog.y: negative is forward / up, positive is backward / down
+            // analog.x: negative is left, positive is right
+            forwardFactor = -analog.y * analog.magnitude;
+            turnInput = -analog.x * analog.magnitude;
+          }
+
+          let targetSpeed = 0;
+          if (forwardFactor > 0.05) {
+            targetSpeed = 24.0 * Math.min(1.0, forwardFactor * 1.15);
+          } else if (forwardFactor < -0.05) {
+            targetSpeed = -6.0 * Math.min(1.0, -forwardFactor);
+          }
+
           e.charizardFlightSpeed = THREE.MathUtils.damp(
-            e.charizardFlightSpeed, targetSpeed, targetSpeed === 0 ? 2.6 : 3.8, dt
+            e.charizardFlightSpeed,
+            targetSpeed,
+            targetSpeed === 0 ? 3.0 : 4.5,
+            dt
           );
-          const turnInput = (leftHeld ? 1 : 0) - (rightHeld ? 1 : 0);
-          const turnRate = 1.55 * (0.58 + Math.min(1, Math.abs(e.charizardFlightSpeed) / 12));
+
+          const turnRate = 2.2 * (0.65 + Math.min(1.0, Math.abs(e.charizardFlightSpeed) / 10));
           e.playerMovement.yaw += turnInput * turnRate * dt;
           while (e.playerMovement.yaw > Math.PI) e.playerMovement.yaw -= Math.PI * 2;
           while (e.playerMovement.yaw < -Math.PI) e.playerMovement.yaw += Math.PI * 2;
@@ -10182,11 +10233,11 @@ export default function App() {
           result.cameraAngle = e.cameraAngle;
 
           let targetVertical = 0;
-          if (ascendHeld && !descendHeld) targetVertical = 7.5;
-          else if (descendHeld && !ascendHeld) targetVertical = -8.0;
-          e.charizardVerticalSpeed = THREE.MathUtils.damp(e.charizardVerticalSpeed, targetVertical, 5.0, dt);
-          e.playerMesh.userData.charizardBank = -turnInput * 0.16;
-          e.playerMesh.userData.charizardPitch = THREE.MathUtils.clamp(-e.charizardVerticalSpeed * 0.022, -0.16, 0.14);
+          if (ascendHeld && !descendHeld) targetVertical = 8.5;
+          else if (descendHeld && !ascendHeld) targetVertical = -8.5;
+          e.charizardVerticalSpeed = THREE.MathUtils.damp(e.charizardVerticalSpeed, targetVertical, 5.5, dt);
+          e.playerMesh.userData.charizardBank = -turnInput * 0.25;
+          e.playerMesh.userData.charizardPitch = THREE.MathUtils.clamp(-e.charizardVerticalSpeed * 0.024, -0.20, 0.18);
 
           const forward = new THREE.Vector3(Math.sin(e.playerMovement.yaw), 0, Math.cos(e.playerMovement.yaw));
           const start = e.playerMovement.position.clone();
@@ -12205,6 +12256,8 @@ export default function App() {
           onOpenBigMap={() => setShowBigMap(true)}
           onToggleMute={handleToggleMute}
           onResetPlayer={handleResetPlayer}
+          onSelectPokemon={switchStarterPokemon}
+          unlockedGeodude={unlockedGeodude}
           isMuted={isMuted}
           playerPos={playerPos}
           playerYaw={playerYaw}

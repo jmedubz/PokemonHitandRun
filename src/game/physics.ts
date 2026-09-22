@@ -525,51 +525,73 @@ export class PlayerMovement {
 
     if (inputs.analogActive && inputs.analogMagnitude !== undefined && inputs.analogMagnitude > 0.01) {
       // =========================================================================
-      // ANALOGUE MOBILE JOYSTICK MOVEMENT (Smooth 360° Angle + Continuous Speed)
+      // ANALOGUE MOBILE JOYSTICK MOVEMENT WITH AUTOMATIC CAMERA STEERING
       // =========================================================================
-      // Screen joystick: analogX (-1 left to +1 right), analogY (-1 up/forward to +1 down/backward)
-      // Negate analogX to match camera-relative horizontal orientation in Three.js world space
-      const stickAngle = Math.atan2(-(inputs.analogX ?? 0), -(inputs.analogY ?? 0));
-      const desiredWorldYaw = updatedCameraAngle + stickAngle;
+      // analogX: -1 (left) to +1 (right)
+      // analogY: -1 (up/forward) to +1 (down/backward)
+      const ax = inputs.analogX ?? 0;
+      const ay = inputs.analogY ?? 0;
 
-      // Smoothly rotate character to face the direction of movement
-      let yawDiff = desiredWorldYaw - this.yaw;
-      while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
-      while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
-      const turnResponsiveness = 14.0;
-      this.yaw += yawDiff * Math.min(clampedDt * turnResponsiveness, 1.0);
-      while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
-      while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
+      // 1. Steering the Camera with Joystick Horizontal Deflection
+      // Moving the joystick left turns camera left; moving right turns camera right.
+      // Player never has to manually swipe the screen just to orient the view while walking.
+      if (Math.abs(ax) > 0.04) {
+        const camSteerSpeed = effectiveTurnRate * (1.15 + Math.abs(ax) * 0.45);
+        updatedCameraAngle -= ax * camSteerSpeed * clampedDt;
+      }
 
-      // Smoothly auto-rotate camera behind the character's movement direction so player doesn't have to rotate camera manually
-      let camDiff = this.yaw - updatedCameraAngle;
-      while (camDiff > Math.PI) camDiff -= Math.PI * 2;
-      while (camDiff < -Math.PI) camDiff += Math.PI * 2;
-      const cameraAutoFollowSpeed = 2.6;
-      updatedCameraAngle += camDiff * Math.min(clampedDt * cameraAutoFollowSpeed, 0.18);
+      // Keep updatedCameraAngle normalized in [-PI, PI]
       while (updatedCameraAngle > Math.PI) updatedCameraAngle -= Math.PI * 2;
       while (updatedCameraAngle < -Math.PI) updatedCameraAngle += Math.PI * 2;
 
-      // Continuous speed curve:
-      // - Near centre (mag 0.05-0.3): slow, precise micro-walk (1.6 - 3.5 m/s)
-      // - Halfway (mag ~0.5): steady walk (~7.5 m/s)
-      // - Further out (mag 0.75): fast walk (~14 m/s)
-      // - Outer edge (mag 1.0): full sprint speed (22.0 m/s)
+      // 2. Speed curve based on stick magnitude
       const mag = THREE.MathUtils.clamp(inputs.analogMagnitude, 0, 1);
       const movementScale = THREE.MathUtils.clamp(inputs.movementScale ?? 1, 0.28, 1);
       let targetSpeed: number;
       if (mag <= 0.45) {
         const t = mag / 0.45;
-        targetSpeed = THREE.MathUtils.lerp(1.6, this.walkSpeed, t * t);
+        targetSpeed = THREE.MathUtils.lerp(1.8, this.walkSpeed, t * t);
       } else {
         const t = (mag - 0.45) / 0.55;
         targetSpeed = THREE.MathUtils.lerp(this.walkSpeed, this.runSpeed, t * (2 - t));
       }
       targetSpeed *= movementScale;
 
-      targetVx = Math.sin(desiredWorldYaw) * targetSpeed;
-      targetVz = Math.cos(desiredWorldYaw) * targetSpeed;
+      // 3. Movement direction in world space relative to camera orientation
+      const camFX = Math.sin(updatedCameraAngle);
+      const camFZ = Math.cos(updatedCameraAngle);
+      const camRX = -Math.cos(updatedCameraAngle);
+      const camRZ = Math.sin(updatedCameraAngle);
+
+      const fwd = -ay; // positive when pushed up/forward
+      const side = ax; // positive when pushed right
+
+      // Backwards movement threshold
+      if (fwd < -0.32 && Math.abs(side) < 0.42) {
+        this.isWalkingBackward = true;
+        targetVx = (fwd * camFX + side * camRX) * (targetSpeed * 0.65);
+        targetVz = (fwd * camFZ + side * camRZ) * (targetSpeed * 0.65);
+      } else {
+        targetVx = (fwd * camFX + side * camRX) * targetSpeed;
+        targetVz = (fwd * camFZ + side * camRZ) * targetSpeed;
+      }
       hasMovement = true;
+
+      // 4. Character facing: smoothly align character yaw with movement direction
+      if (this.isWalkingBackward) {
+        let yawDiff = updatedCameraAngle - this.yaw;
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        this.yaw += yawDiff * Math.min(clampedDt * 10.0, 1.0);
+      } else if (Math.hypot(targetVx, targetVz) > 0.05) {
+        const desiredMoveYaw = Math.atan2(targetVx, targetVz);
+        let yawDiff = desiredMoveYaw - this.yaw;
+        while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+        while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+        this.yaw += yawDiff * Math.min(clampedDt * 14.0, 1.0);
+      }
+      while (this.yaw > Math.PI) this.yaw -= Math.PI * 2;
+      while (this.yaw < -Math.PI) this.yaw += Math.PI * 2;
     } else if (inputs.analogActive) {
       // Analogue joystick is active, but thumb is within center deadzone -> smooth stop
       hasMovement = false;

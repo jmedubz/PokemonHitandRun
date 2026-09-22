@@ -1224,24 +1224,31 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ---------------- ASH BATTLE VICTORY NOTIFICATION ---------------- */}
       {showAshVictory && (
         <div
-          className="absolute left-1/2 transform -translate-x-1/2 pointer-events-auto w-full max-w-lg px-4 z-40 transition-[top] duration-200"
-          style={{ top: `${topHudClearance}px` }}
+          className="fixed top-16 left-1/2 -translate-x-1/2 pointer-events-auto w-[92vw] max-w-lg px-2 z-[150] transition-all duration-200"
         >
           <button
             type="button"
-            onClick={onDismissAshVictory}
-            className="relative w-full bg-gradient-to-r from-amber-600 to-yellow-500 border-2 border-yellow-200 rounded-2xl p-4 shadow-[0_0_40px_rgba(234,179,8,0.9)] text-slate-950 font-bold text-center cursor-pointer hover:brightness-110 transition overflow-hidden"
-            title="Click to dismiss • Auto-closes after 6 seconds"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismissAshVictory();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDismissAshVictory();
+            }}
+            className="relative w-full bg-gradient-to-r from-amber-600 to-yellow-500 border-2 border-yellow-200 rounded-2xl p-4 shadow-[0_0_40px_rgba(234,179,8,0.9)] text-slate-950 font-bold text-center cursor-pointer hover:brightness-110 active:scale-[0.98] transition overflow-hidden pointer-events-auto"
+            title="Tap to dismiss"
           >
-            <X className="absolute top-2 right-2 w-4 h-4 opacity-70" />
+            <X className="absolute top-2.5 right-2.5 w-5 h-5 text-slate-950/80" />
             <div className="text-2xl font-black tracking-wide mb-1">🎉 ASH WAS DEFEATED! 🎉</div>
             <div className="text-sm">
               You triumphed over Ash Ketchum's Springfield Dream Team!
               <br />
               <span className="font-extrabold underline">GEODUDE WITH LEGS</span> is now unlocked!
             </div>
-            <div className="mt-2 text-[10px] font-black uppercase tracking-wider opacity-70">
-              Click to dismiss • Auto-closes in 6s
+            <div className="mt-2 text-[10px] font-black uppercase tracking-wider opacity-80">
+              Tap / Click to dismiss
             </div>
             <div className="hud-notification-life absolute bottom-0 left-0 h-[3px] bg-slate-950/70" />
           </button>
@@ -1282,12 +1289,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           manually). The live Ash battle status panel is state-driven and remains
           visible for the duration of the battle.
       */}
+      {/* ---------------- ACTIVE DIALOGUE & ASH BATTLE BOSS HUD ---------------- */}
       {((ashBattleState.isActive && ashBattleState.currentBoss) || activeDialogue) && (
         <div
-          className="absolute z-40 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-center"
-          style={persistentDialogueStyle}
+          className={
+            controlMode === 'mobile'
+              ? "fixed top-24 left-1/2 -translate-x-1/2 z-[135] pointer-events-none flex justify-center w-[92vw] max-w-md px-2"
+              : "absolute z-40 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-center"
+          }
+          style={controlMode === 'mobile' ? undefined : persistentDialogueStyle}
         >
-          <div className="w-full max-w-2xl flex flex-col items-center gap-2">
+          <div className="w-full max-w-2xl flex flex-col items-center gap-2 pointer-events-auto">
             {ashBattleState.isActive && ashBattleState.currentBoss && (
               <div className="pointer-events-none w-full bg-slate-950/95 border-2 border-red-500 rounded-xl px-4 py-2.5 shadow-[0_0_24px_rgba(239,68,68,0.45)] backdrop-blur-xl text-white">
                 <div className="flex items-center justify-between gap-3 mb-1.5">
@@ -1324,20 +1336,28 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             {activeDialogue && (
               <button
                 type="button"
-                onClick={onDismissDialogue}
-                className="group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-amber-400 rounded-xl px-4 py-3 pr-10 shadow-2xl backdrop-blur-xl text-white text-left cursor-pointer hover:border-amber-300 hover:bg-slate-950 transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 overflow-hidden"
-                title="Click to dismiss dialogue • Auto-closes after 6 seconds"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDismissDialogue();
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDismissDialogue();
+                }}
+                className="group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-amber-400 rounded-xl px-4 py-3 pr-10 shadow-2xl backdrop-blur-xl text-white text-left cursor-pointer hover:border-amber-300 active:scale-[0.99] transition focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300/50 overflow-hidden"
+                title="Tap / Click to dismiss dialogue"
                 aria-label={`Dismiss dialogue from ${activeDialogue.speaker}`}
               >
-                <X className="absolute top-3 right-3 w-4 h-4 text-slate-400 group-hover:text-white transition" />
+                <X className="absolute top-3 right-3 w-5 h-5 text-amber-300 group-hover:text-white transition" />
                 <div className="font-black text-xs text-amber-400 tracking-wide mb-1">
                   {activeDialogue.speaker}:
                 </div>
                 <div className="text-sm font-semibold leading-snug text-slate-100 whitespace-normal break-words overflow-visible">
                   "{activeDialogue.text}"
                 </div>
-                <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-slate-500 group-hover:text-slate-300 transition">
-                  Click to dismiss • Auto-closes in 6s
+                <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-amber-300/80 group-hover:text-amber-200 transition flex items-center gap-1">
+                  <span>Tap or click message to dismiss</span>
                 </div>
                 <div className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-amber-300/90" />
               </button>
@@ -1349,33 +1369,35 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       {/* ---------------- SIX-SECOND TEMPORARY NOTIFICATION LANE ---------------- */}
       {temporaryNotification && (
         <div
-          className={
-            controlMode === 'mobile'
-              ? "absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none flex justify-center w-[88vw] max-w-sm px-2"
-              : "absolute z-50 pointer-events-none transition-[left,right,bottom] duration-150 flex justify-end"
-          }
-          style={controlMode === 'mobile' ? undefined : temporaryNotificationStyle}
+          className="fixed top-14 left-1/2 -translate-x-1/2 z-[160] pointer-events-auto flex justify-center w-[94vw] max-w-md px-2"
         >
           <button
             key={temporaryNotification.id}
             type="button"
-            onClick={onDismissTemporaryNotification}
-            className={`hud-temporary-notification group relative pointer-events-auto bg-slate-950/95 border border-cyan-400/90 rounded-xl px-3.5 py-2 shadow-[0_0_24px_rgba(34,211,238,0.35)] backdrop-blur-xl text-white cursor-pointer hover:border-cyan-300 transition overflow-hidden ${
-              controlMode === 'mobile'
-                ? 'w-full text-center py-2 px-6 pr-8'
-                : 'w-fit max-w-[440px] min-w-[240px] text-left pr-9'
-            }`}
-            title="Click to close"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismissTemporaryNotification();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDismissTemporaryNotification();
+            }}
+            className="hud-temporary-notification group relative pointer-events-auto w-full bg-slate-950/95 border-2 border-cyan-400/90 rounded-2xl px-5 py-3.5 shadow-[0_0_30px_rgba(34,211,238,0.55)] backdrop-blur-2xl text-white cursor-pointer hover:border-cyan-300 active:scale-[0.98] transition overflow-hidden text-center"
+            title="Tap / Click to close message"
             aria-label={`Close notification from ${temporaryNotification.speaker}`}
           >
-            <X className="absolute top-2.5 right-2.5 w-3.5 h-3.5 text-slate-400 group-hover:text-white transition" />
-            <div className={`text-[10px] uppercase tracking-wider font-black text-cyan-300 mb-0.5 ${controlMode === 'mobile' ? 'text-center' : 'text-left'}`}>
+            <X className="absolute top-2.5 right-2.5 w-5 h-5 text-cyan-300 group-hover:text-white transition" />
+            <div className="text-[11px] uppercase tracking-wider font-black text-cyan-300 mb-0.5 text-center">
               {temporaryNotification.speaker}
             </div>
-            <div className={`text-xs sm:text-sm font-semibold leading-snug text-slate-100 break-words ${controlMode === 'mobile' ? 'text-center' : 'text-left'}`}>
+            <div className="text-xs sm:text-sm font-semibold leading-snug text-slate-100 break-words text-center">
               {temporaryNotification.text}
             </div>
-            <div className="hud-notification-life absolute bottom-0 left-0 h-[2px] bg-cyan-300/80" />
+            <div className="mt-1.5 text-[9px] uppercase tracking-wider font-bold text-cyan-300/80 group-hover:text-cyan-200 transition">
+              Tap message to dismiss
+            </div>
+            <div className="hud-notification-life absolute bottom-0 left-0 h-[2.5px] bg-cyan-300/90" />
           </button>
         </div>
       )}

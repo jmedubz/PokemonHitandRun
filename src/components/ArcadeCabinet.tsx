@@ -252,9 +252,10 @@ interface TrafficCar {
 }
 
 export const ArcadeCabinet: React.FC<ArcadeCabinetProps> = ({ onExit, machineName = 'Retro Hit & Run 8-Bit', gameId }) => {
-  if (gameId && gameId !== 'retro_hit_and_run') {
-    const mod = getArcadeGame(gameId);
-    const ModularComponent = mod.component;
+  const mod = getArcadeGame(gameId);
+  const ModularComponent = mod?.component;
+
+  if (ModularComponent) {
     return (
       <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 select-none overflow-hidden p-2 md:p-6 font-mono">
         <div className="relative w-full max-w-5xl h-full max-h-[92vh] flex flex-col rounded-3xl border-8 border-purple-900 bg-slate-950 shadow-[0_0_80px_rgba(168,85,247,0.45)] overflow-hidden">

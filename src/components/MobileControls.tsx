@@ -27,6 +27,7 @@ import {
   WorldMapRoadFeature,
   WorldMapAreaFeature,
   WorldGoalView,
+  PokemonCharacterId,
 } from '../types';
 
 const getAreaColor = (area: WorldMapAreaFeature): string => {
@@ -108,6 +109,8 @@ export interface MobileControlsProps {
   onOpenBigMap: () => void;
   onToggleMute: () => void;
   onResetPlayer: () => void;
+  onSelectPokemon?: (id: PokemonCharacterId) => void;
+  unlockedGeodude?: boolean;
   isMuted: boolean;
   playerPos: { x: number; z: number };
   playerYaw: number;
@@ -140,6 +143,8 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   onOpenBigMap,
   onToggleMute,
   onResetPlayer,
+  onSelectPokemon,
+  unlockedGeodude = false,
   isMuted,
   playerPos,
   playerYaw,
@@ -418,6 +423,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
   // ACTION BUTTON PRESS HANDLERS
   // ---------------------------------------------------------------------------
   const lastTouchTimeRef = useRef<number>(0);
+  const lastGrabTapTimeRef = useRef<number>(0);
   const createButtonHandlers = (
     onPress: () => void,
     onRelease?: () => void
@@ -510,21 +516,26 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
         style={{ touchAction: 'none' }}
       />
 
-      {/* ================= IDLE THUMB GUIDE (Shown when not touching) ================= */}
+      {/* ================= UNIFIED VIRTUAL JOYSTICK ================= */}
+      {/* 1. Idle Thumb Guide (Shown when not touching) */}
       {!joystickActive && (
-        <div
-          className="fixed left-12 bottom-12 pointer-events-none z-20 opacity-40 transition-opacity duration-300"
-          style={{ transform: 'translate(-50%, 50%)' }}
-        >
-          <div className="w-28 h-28 rounded-full border border-white/25 bg-slate-950/20 backdrop-blur-xs flex items-center justify-center">
-            <div className="w-12 h-12 rounded-full border border-white/30 bg-white/10 animate-pulse flex items-center justify-center">
-              <div className="w-3 h-3 rounded-full bg-white/40" />
+        <div className="fixed left-7 bottom-6 pointer-events-none z-20 flex flex-col items-center justify-center transition-opacity duration-200">
+          <div className="relative w-24 h-24 rounded-full border border-white/15 bg-slate-950/20 backdrop-blur-[2px] flex items-center justify-center shadow-md">
+            {/* Inner Resting Thumb Knob */}
+            <div className="w-10 h-10 rounded-full border border-white/20 bg-white/5 flex items-center justify-center shadow-xs">
+              <div className="w-2.5 h-2.5 rounded-full bg-white/20" />
             </div>
+
+            {/* Subtle Direction Indicator Notches */}
+            <div className="absolute top-1.5 w-1 h-1.5 bg-white/15 rounded-full" />
+            <div className="absolute bottom-1.5 w-1 h-1.5 bg-white/15 rounded-full" />
+            <div className="absolute left-1.5 h-1 w-1.5 bg-white/15 rounded-full" />
+            <div className="absolute right-1.5 h-1 w-1.5 bg-white/15 rounded-full" />
           </div>
         </div>
       )}
 
-      {/* ================= FLOATING TRANSLUCENT JOYSTICK (Dynamic Under Thumb) ================= */}
+      {/* 2. Floating Translucent Joystick (Dynamic Under Thumb while actively touching) */}
       {joystickActive && joystickCenter && (
         <div
           className="fixed pointer-events-none z-30 transition-opacity duration-150 animate-in fade-in"
@@ -535,27 +546,22 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
           }}
         >
           {/* Base Ring */}
-          <div className="relative w-32 h-32 rounded-full border-2 border-white/35 bg-slate-950/50 backdrop-blur-md shadow-[0_0_32px_rgba(0,0,0,0.65)] flex items-center justify-center">
-            {/* Guide Rings */}
-            <div className="absolute inset-3 rounded-full border border-white/15" />
-            <div className="absolute inset-7 rounded-full border border-white/20" />
-            <div className="absolute w-2 h-2 rounded-full bg-white/40" />
-
+          <div className="relative w-26 h-26 rounded-full border border-white/25 bg-slate-950/40 backdrop-blur-xs shadow-[0_0_16px_rgba(0,0,0,0.4)] flex items-center justify-center">
             {/* Subtle Crosshair accents */}
-            <div className="absolute top-1.5 w-1 h-2 bg-white/35 rounded-full" />
-            <div className="absolute bottom-1.5 w-1 h-2 bg-white/35 rounded-full" />
-            <div className="absolute left-1.5 h-1 w-2 bg-white/35 rounded-full" />
-            <div className="absolute right-1.5 h-1 w-2 bg-white/35 rounded-full" />
+            <div className="absolute top-1.5 w-1 h-2 bg-white/30 rounded-full" />
+            <div className="absolute bottom-1.5 w-1 h-2 bg-white/30 rounded-full" />
+            <div className="absolute left-1.5 h-1 w-2 bg-white/30 rounded-full" />
+            <div className="absolute right-1.5 h-1 w-2 bg-white/30 rounded-full" />
 
             {/* Inner Thumb Knob */}
             <div
               id="virtual-joystick-knob"
-              className="absolute w-14 h-14 rounded-full border-2 border-white/90 bg-gradient-to-b from-white/80 to-slate-200/60 backdrop-blur-lg shadow-[0_0_20px_rgba(255,255,255,0.55)] flex items-center justify-center will-change-transform"
+              className="absolute w-12 h-12 rounded-full border border-white/70 bg-gradient-to-b from-white/75 to-slate-200/50 backdrop-blur-sm shadow-[0_0_12px_rgba(255,255,255,0.35)] flex items-center justify-center will-change-transform"
               style={{
                 transform: `translate3d(${knobPos.x}px, ${knobPos.y}px, 0)`,
               }}
             >
-              <div className="w-5 h-5 rounded-full bg-white/60 border border-white/50 shadow-inner" />
+              <div className="w-3.5 h-3.5 rounded-full bg-white/40 border border-white/40 shadow-inner" />
             </div>
           </div>
         </div>
@@ -593,10 +599,93 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
       )}
 
       {/* ---------------- TOP BAR (Safe & Compact) ---------------- */}
-      <div className="flex items-start justify-between w-full pointer-events-none z-30 relative">
+      <div className="flex items-start justify-between w-full pointer-events-none z-30 relative pt-1 px-1">
         {/* Top-Left: Compact Minimap & Status */}
-        <div className="flex items-start gap-2.5 pointer-events-auto">
-          {/* COMPACT MINIMAP: Simpsons Hit & Run Style with Outer Gauge & Police Siren */}
+        <div className="flex flex-col items-start gap-1 pointer-events-auto">
+          {/* Quick Pokemon Selector on Mobile directly above Hit & Run / Minimap */}
+          <div className="flex items-center gap-1.5 bg-slate-950/95 border-2 border-amber-400/80 rounded-full px-2.5 py-1 shadow-[0_0_20px_rgba(251,191,36,0.35)] backdrop-blur-md z-20 relative">
+            {/* Pikachu */}
+            <button
+              type="button"
+              id="mobile-select-pikachu"
+              onClick={(e) => { e.stopPropagation(); onSelectPokemon?.('pikachu'); }}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelectPokemon?.('pikachu'); }}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                currentPokemonId === 'pikachu'
+                  ? 'bg-amber-400 text-slate-950 ring-2 ring-white scale-110 shadow-lg'
+                  : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+              }`}
+              title="Pikachu ⚡"
+            >
+              ⚡
+            </button>
+            {/* Charmander */}
+            <button
+              type="button"
+              id="mobile-select-charmander"
+              onClick={(e) => { e.stopPropagation(); onSelectPokemon?.('charmander'); }}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelectPokemon?.('charmander'); }}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                currentPokemonId === 'charmander'
+                  ? 'bg-orange-500 text-white ring-2 ring-white scale-110 shadow-lg'
+                  : 'bg-slate-800 hover:bg-slate-700 text-orange-400'
+              }`}
+              title="Charmander 🔥"
+            >
+              🔥
+            </button>
+            {/* Poliwag */}
+            <button
+              type="button"
+              id="mobile-select-poliway"
+              onClick={(e) => { e.stopPropagation(); onSelectPokemon?.('poliway'); }}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelectPokemon?.('poliway'); }}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                currentPokemonId === 'poliway'
+                  ? 'bg-blue-500 text-white ring-2 ring-white scale-110 shadow-lg'
+                  : 'bg-slate-800 hover:bg-slate-700 text-blue-400'
+              }`}
+              title="Poliwag 💧"
+            >
+              💧
+            </button>
+            {/* Geodude (if unlocked) */}
+            {unlockedGeodude && (
+              <button
+                type="button"
+                id="mobile-select-geodude"
+                onClick={(e) => { e.stopPropagation(); onSelectPokemon?.('geodude_legs'); }}
+                onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelectPokemon?.('geodude_legs'); }}
+                className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                  currentPokemonId === 'geodude_legs'
+                    ? 'bg-emerald-500 text-white ring-2 ring-white scale-110 shadow-lg'
+                    : 'bg-slate-800 hover:bg-slate-700 text-emerald-400'
+                }`}
+                title="Geodude with Legs 💪"
+              >
+                💪
+              </button>
+            )}
+            {/* Charizard */}
+            <button
+              type="button"
+              id="mobile-select-charizard"
+              onClick={(e) => { e.stopPropagation(); onSelectPokemon?.('charizard'); }}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); onSelectPokemon?.('charizard'); }}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full text-xs font-black transition-all flex items-center justify-center cursor-pointer active:scale-95 ${
+                currentPokemonId === 'charizard'
+                  ? 'bg-red-500 text-white ring-2 ring-white scale-110 shadow-lg'
+                  : 'bg-slate-800 hover:bg-slate-700 text-red-400'
+              }`}
+              title="Charizard 🐉 (Fly)"
+            >
+              🐉
+            </button>
+          </div>
+
+          {/* Minimap & Status with clear spacing so siren doesn't overlap */}
+          <div className="flex items-start gap-2.5 mt-3.5">
+            {/* COMPACT MINIMAP: Simpsons Hit & Run Style with Outer Gauge & Police Siren */}
           <div className="flex flex-col items-center">
             <div
               id="mobile-minimap-btn"
@@ -610,33 +699,39 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
               role="button"
               tabIndex={0}
             >
-              {/* Police Siren Light Bar Fixture on Top (12 o'clock) */}
-              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center justify-center">
-                <div className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border-2 bg-slate-900 shadow-xl transition-all ${
+              {/* Police Siren Light Bar Fixture on Top (12 o'clock) - Simpsons Hit & Run Style */}
+              <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-30 pointer-events-none flex items-center justify-center">
+                <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full border-2 bg-gradient-to-b from-slate-700 via-slate-900 to-black shadow-2xl transition-all ${
                   hitAndRunActive || wantedHeat > 85
-                    ? 'border-red-500 shadow-[0_0_16px_rgba(239,68,68,0.8)] scale-110'
+                    ? 'border-red-500 shadow-[0_0_24px_rgba(239,68,68,0.95)] scale-110'
                     : wantedHeat > 0
-                    ? 'border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.5)]'
-                    : 'border-slate-600/80 shadow-md'
+                    ? 'border-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.65)]'
+                    : 'border-slate-500 shadow-md'
                 }`}>
-                  {/* Left Blue Siren Light */}
-                  <div className={`w-3.5 h-3 rounded-l-full border ${
+                  {/* Left Blue Siren Light Dome */}
+                  <div className={`w-4 h-3 rounded-l-full border flex items-center justify-center relative overflow-hidden ${
                     wantedHeat > 0 || hitAndRunActive
-                      ? 'bg-blue-500 border-blue-300 animate-siren-blue'
-                      : 'bg-blue-900/60 border-blue-700/50'
-                  }`} />
-
-                  {/* Center Police Badge Cap */}
-                  <div className="w-3 h-3.5 rounded-sm bg-gradient-to-b from-slate-100 to-slate-300 border border-slate-400 flex items-center justify-center shadow-inner">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 border border-amber-600" />
+                      ? 'bg-blue-500 border-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.95)] animate-pulse'
+                      : 'bg-blue-900/80 border-blue-700/60'
+                  }`}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-100/90 shadow-inner" />
                   </div>
 
-                  {/* Right Red Siren Light */}
-                  <div className={`w-3.5 h-3 rounded-r-full border ${
+                  {/* Center Police Badge / Speaker Emblem */}
+                  <div className="w-3.5 h-4 rounded-sm bg-gradient-to-b from-slate-100 via-slate-300 to-slate-400 border border-slate-300 flex items-center justify-center shadow-inner">
+                    <div className="w-2 h-2 rounded-full bg-amber-400 border border-amber-600 flex items-center justify-center shadow-xs">
+                      <div className="w-1 h-1 rounded-full bg-yellow-100" />
+                    </div>
+                  </div>
+
+                  {/* Right Red Siren Light Dome */}
+                  <div className={`w-4 h-3 rounded-r-full border flex items-center justify-center relative overflow-hidden ${
                     wantedHeat > 0 || hitAndRunActive
-                      ? 'bg-red-500 border-red-300 animate-siren-red'
-                      : 'bg-red-900/60 border-red-700/50'
-                  }`} />
+                      ? 'bg-red-500 border-red-200 shadow-[0_0_12px_rgba(239,68,68,0.95)] animate-pulse'
+                      : 'bg-red-900/80 border-red-700/60'
+                  }`}>
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-100/90 shadow-inner" />
+                  </div>
                 </div>
               </div>
 
@@ -645,13 +740,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                 className="absolute inset-0 w-full h-full pointer-events-none z-20"
                 viewBox="0 0 116 116"
               >
-                {/* Background Dark Track */}
+                {/* Background Dark Outer Bezel */}
                 <circle
                   cx="58"
                   cy="58"
                   r="52"
                   fill="none"
-                  stroke="#0f172a"
+                  stroke="#020617"
                   strokeWidth="8"
                 />
                 <circle
@@ -659,9 +754,32 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                   cy="58"
                   r="52"
                   fill="none"
-                  stroke="#334155"
-                  strokeWidth="5"
+                  stroke="#1e293b"
+                  strokeWidth="5.5"
                 />
+
+                {/* Outer Gauge Track Segment Marks */}
+                {Array.from({ length: 24 }).map((_, idx) => {
+                  const angle = (idx * 360) / 24;
+                  const rad = (angle * Math.PI) / 180;
+                  const r1 = 49;
+                  const r2 = 55;
+                  const x1 = 58 + Math.cos(rad) * r1;
+                  const y1 = 58 + Math.sin(rad) * r1;
+                  const x2 = 58 + Math.cos(rad) * r2;
+                  const y2 = 58 + Math.sin(rad) * r2;
+                  return (
+                    <line
+                      key={idx}
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke="#0f172a"
+                      strokeWidth="1.2"
+                    />
+                  );
+                })}
 
                 {/* Active Heat Gauge Fill Arc */}
                 {wantedHeat > 0 && (
@@ -687,19 +805,19 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                       transition: 'stroke-dashoffset 0.25s ease-out, stroke 0.25s ease',
                       filter:
                         hitAndRunActive || wantedHeat > 85
-                          ? 'drop-shadow(0 0 6px #ef4444)'
+                          ? 'drop-shadow(0 0 8px #ef4444)'
                           : wantedHeat > 45
-                          ? 'drop-shadow(0 0 4px #f97316)'
-                          : 'drop-shadow(0 0 4px #facc15)',
+                          ? 'drop-shadow(0 0 5px #f97316)'
+                          : 'drop-shadow(0 0 5px #facc15)',
                     }}
                   />
                 )}
 
                 {/* Bevel Notch Quadrant Ticks (12, 3, 6, 9 o'clock) */}
-                <line x1="58" y1="2" x2="58" y2="10" stroke="#cbd5e1" strokeWidth="2.5" />
-                <line x1="114" y1="58" x2="106" y2="58" stroke="#cbd5e1" strokeWidth="2.5" />
-                <line x1="58" y1="114" x2="58" y2="106" stroke="#cbd5e1" strokeWidth="2.5" />
-                <line x1="2" y1="58" x2="10" y2="58" stroke="#cbd5e1" strokeWidth="2.5" />
+                <line x1="58" y1="2" x2="58" y2="10" stroke="#f8fafc" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="114" y1="58" x2="106" y2="58" stroke="#f8fafc" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="58" y1="114" x2="58" y2="106" stroke="#f8fafc" strokeWidth="2.5" strokeLinecap="round" />
+                <line x1="2" y1="58" x2="10" y2="58" stroke="#f8fafc" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
 
               {/* Circular Minimap Inner Display */}
@@ -833,6 +951,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             )}
           </div>
         </div>
+      </div>
 
         {/* Top-Right: Quick Action Icons (Mute, Reset, Pause) */}
         <div className="flex items-center gap-2 pointer-events-auto">
@@ -881,28 +1000,32 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
 
       {/* ---------------- INTERACTION PROMPT BANNER (Top-Middle) ---------------- */}
       {cleanedPrompt && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 pointer-events-none z-30">
-          <div className="rounded-full border border-yellow-400/80 bg-slate-950/95 px-4 py-1.5 text-center shadow-xl backdrop-blur-md">
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 pointer-events-auto z-30">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAction('interact');
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAction('interact');
+            }}
+            className="rounded-full border border-yellow-400/80 bg-slate-950/95 px-4 py-1.5 text-center shadow-xl backdrop-blur-md cursor-pointer active:scale-95 transition-transform flex items-center gap-1.5"
+          >
             <span className="text-xs font-black text-yellow-300 tracking-wide">
               {cleanedPrompt}
             </span>
-          </div>
+            <span className="text-[9px] text-amber-200/80 font-bold bg-amber-500/20 px-1.5 py-0.5 rounded-full uppercase">Tap</span>
+          </button>
         </div>
       )}
 
       {/* ---------------- BOTTOM AREA: CONTROLS ---------------- */}
       <div className="absolute inset-x-0 bottom-0 pointer-events-none flex items-end justify-between px-4 pb-2 z-30">
-        {/* ================= LEFT SIDE: SUBTLE JOYSTICK HINT WHEN IDLE ================= */}
-        <div className="pointer-events-none relative mb-2 w-32 flex flex-col items-center">
-          {!joystickActive && (
-            <div className="w-16 h-16 rounded-full border border-white/15 bg-slate-950/20 flex items-center justify-center opacity-40">
-              <div className="w-6 h-6 rounded-full border border-white/20 bg-white/10" />
-            </div>
-          )}
-          <div className="mt-1 text-center text-[9px] font-bold text-white/40 uppercase tracking-widest pointer-events-none">
-            {aircraft ? 'Pitch & Turn' : inVehicle ? 'Steer & Drive' : 'Touch to Move'}
-          </div>
-        </div>
+        {/* ================= LEFT SIDE: SPACING RESERVED FOR JOYSTICK ================= */}
+        <div className="pointer-events-none relative mb-2 w-32 h-10" />
 
         {/* ================= CENTER: COMPACT TELEMETRY (If Vehicle/Plane) ================= */}
         {inVehicle && (
@@ -1092,13 +1215,13 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
             </div>
           ) : parachute ? (
             /* PARACHUTE CONTROLS */
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 pointer-events-auto">
               {parachute.mode === 'freefall' ? (
                 <button
                   type="button"
                   id="btn-deploy-chute"
                   {...createButtonHandlers(() => onAction('chute_deploy'))}
-                  className="w-20 h-20 rounded-full border-2 border-emerald-400 bg-emerald-500/40 active:bg-emerald-500/70 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white"
+                  className="w-20 h-20 rounded-full border-2 border-emerald-400 bg-emerald-500/50 active:bg-emerald-500/80 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white pointer-events-auto active:scale-95 transition-transform"
                 >
                   <Disc className="w-8 h-8 text-emerald-200" />
                   <span className="text-[10px] font-black tracking-wider">DEPLOY</span>
@@ -1108,7 +1231,7 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                   type="button"
                   id="btn-cut-chute"
                   {...createButtonHandlers(() => onAction('chute_cut'))}
-                  className="w-20 h-20 rounded-full border-2 border-rose-500 bg-rose-600/40 active:bg-rose-600/70 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white"
+                  className="w-20 h-20 rounded-full border-2 border-rose-500 bg-rose-600/50 active:bg-rose-600/80 shadow-2xl backdrop-blur-md flex flex-col items-center justify-center text-white pointer-events-auto active:scale-95 transition-transform"
                 >
                   <LogOut className="w-8 h-8 text-rose-200" />
                   <span className="text-[10px] font-black tracking-wider">CUT CHUTE</span>
@@ -1184,8 +1307,10 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                   <button
                     type="button"
                     id="btn-throw-npc"
-                    {...createButtonHandlers(() => onAction('grab'))}
-                    className="w-13 h-13 rounded-full border-2 border-purple-400/80 bg-purple-600/35 active:bg-purple-600/70 shadow-lg backdrop-blur-md flex flex-col items-center justify-center text-white animate-bounce"
+                    {...createButtonHandlers(() => {
+                      onAction('grab');
+                    })}
+                    className="w-13 h-13 rounded-full border-2 border-purple-400/90 bg-purple-600/60 active:bg-purple-600/90 shadow-xl backdrop-blur-md flex flex-col items-center justify-center text-white animate-bounce pointer-events-auto active:scale-95 transition-transform"
                   >
                     <span className="text-xs">🤾</span>
                     <span className="text-[7.5px] font-black">THROW</span>
@@ -1194,8 +1319,10 @@ export const MobileControls: React.FC<MobileControlsProps> = ({
                   <button
                     type="button"
                     id="btn-grab-npc"
-                    {...createButtonHandlers(() => onAction('grab'))}
-                    className="w-12 h-12 rounded-full border border-purple-400/40 bg-purple-900/25 active:bg-purple-600/50 shadow-md backdrop-blur-md flex flex-col items-center justify-center text-purple-200"
+                    {...createButtonHandlers(() => {
+                      onAction('grab');
+                    })}
+                    className="w-12 h-12 rounded-full border border-purple-400/50 bg-purple-900/50 active:bg-purple-600/70 shadow-md backdrop-blur-md flex flex-col items-center justify-center text-purple-200 pointer-events-auto active:scale-95 transition-transform"
                   >
                     <span className="text-xs">✋</span>
                     <span className="text-[7px] font-black">GRAB</span>

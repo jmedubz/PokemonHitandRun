@@ -3175,114 +3175,451 @@ export function createDocBrownNPC(): THREE.Group {
 
 // Back to the Future Main Character 2: Marty McFly
 export function createMartyMcFlyNPC(): THREE.Group {
-  const root = createCameoHumanoid({
-    name: 'npc_marty_mcfly',
-    skin: 0xfce4d6, torso: 0xd97706, legs: 0x1d4ed8, boots: 0xffffff,
-    scale: 0.98, combatWeight: 0.95,
+  // Reference-driven 1985 Marty look: realistic human proportions, swept brown hair,
+  // red quilted puffer vest, denim jacket, blue checked shirt, blue jeans and light sneakers.
+  // This is built procedurally so it stays lightweight and dependency-free in the browser.
+  const root = new THREE.Group();
+  root.name = 'npc_marty_mcfly';
+  root.userData.combatWeight = 0.95;
+  root.userData.movementMode = 'ground';
+
+  const skinMat = new THREE.MeshStandardMaterial({
+    color: 0xf1c7a4,
+    roughness: 0.58,
+    metalness: 0.0,
+  });
+  const skinShadowMat = new THREE.MeshStandardMaterial({
+    color: 0xdca885,
+    roughness: 0.62,
+    metalness: 0.0,
+  });
+  const hairMat = new THREE.MeshStandardMaterial({
+    color: 0x3b2419,
+    roughness: 0.72,
+    metalness: 0.0,
+  });
+  const denimMat = new THREE.MeshStandardMaterial({
+    color: 0x315d82,
+    roughness: 0.82,
+    metalness: 0.01,
+  });
+  const denimDarkMat = new THREE.MeshStandardMaterial({
+    color: 0x244865,
+    roughness: 0.84,
+    metalness: 0.01,
+  });
+  const jeansMat = new THREE.MeshStandardMaterial({
+    color: 0x28547b,
+    roughness: 0.86,
+    metalness: 0.0,
+  });
+  const vestMat = new THREE.MeshStandardMaterial({
+    color: 0xb83b2d,
+    roughness: 0.48,
+    metalness: 0.015,
+  });
+  const vestDarkMat = new THREE.MeshStandardMaterial({
+    color: 0x8e2d24,
+    roughness: 0.56,
+    metalness: 0.01,
+  });
+  const snapMat = new THREE.MeshStandardMaterial({
+    color: 0xb69a6a,
+    roughness: 0.28,
+    metalness: 0.72,
+  });
+  const sneakerMat = new THREE.MeshStandardMaterial({
+    color: 0xe8e4dc,
+    roughness: 0.72,
+    metalness: 0.0,
+  });
+  const soleMat = new THREE.MeshStandardMaterial({
+    color: 0xc9c6bf,
+    roughness: 0.88,
+    metalness: 0.0,
+  });
+  const beltMat = new THREE.MeshStandardMaterial({
+    color: 0x4b3529,
+    roughness: 0.72,
+    metalness: 0.02,
   });
 
-  const hairColor = 0x5c3d2e;
-  const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.5, metalness: 0.05 });
-  const vestMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.45, metalness: 0.1 }); // Red/Orange Down Vest
-  const denimMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.6, metalness: 0.05 }); // Blue Denim Jacket/Jeans
-  const shirtMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.7 }); // Inner Checkered Shirt
-  const brassMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 });
+  const shirtTexture = (() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#c8d9e8';
+      ctx.fillRect(0, 0, 128, 128);
 
-  // Add Marty's signature 1985 Feathered Hair Quiff & Swoop to headGroup
-  let headGroup: THREE.Group | null = null;
-  root.traverse((child) => {
-    if (child instanceof THREE.Group && child.position.y > 1.9) {
-      headGroup = child;
+      // Fine white and blue woven checks matching the reference shirt.
+      ctx.strokeStyle = 'rgba(255,255,255,0.84)';
+      ctx.lineWidth = 5;
+      for (let v = 10; v < 128; v += 32) {
+        ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, 128); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(128, v); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(35,72,103,0.75)';
+      ctx.lineWidth = 2;
+      for (let v = 24; v < 128; v += 32) {
+        ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, 128); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(128, v); ctx.stroke();
+      }
+      ctx.strokeStyle = 'rgba(89,128,157,0.48)';
+      ctx.lineWidth = 1;
+      for (let v = 3; v < 128; v += 16) {
+        ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, 128); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, v); ctx.lineTo(128, v); ctx.stroke();
+      }
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2.2, 2.8);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  })();
+
+  const shirtMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: shirtTexture,
+    roughness: 0.80,
+    metalness: 0.0,
+  });
+
+  // -----------------------------
+  // BODY / LAYERED 1985 OUTFIT
+  // -----------------------------
+  const torso = new THREE.Group();
+  torso.name = 'marty_torso';
+
+  // Checked shirt base, lightly tapered through the waist.
+  const shirtBody = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.285, 0.72, 24), shirtMat);
+  shirtBody.position.y = 1.34;
+  shirtBody.scale.set(1.05, 1.0, 0.73);
+  torso.add(shirtBody);
+
+  // Denim jacket body behind the open vest. The checked shirt remains visible in the centre.
+  const jacketBack = new THREE.Mesh(new THREE.CylinderGeometry(0.345, 0.31, 0.70, 24), denimMat);
+  jacketBack.position.set(0, 1.35, -0.055);
+  jacketBack.scale.set(1.03, 1.0, 0.74);
+  torso.add(jacketBack);
+
+  // Re-expose the shirt opening in front of the jacket body.
+  const shirtFront = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.61, 0.055), shirtMat);
+  shirtFront.position.set(0, 1.38, 0.252);
+  torso.add(shirtFront);
+
+  // Denim placket / jacket opening, visible between vest and shirt.
+  [-1, 1].forEach((side) => {
+    const opening = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.61, 0.055), denimDarkMat);
+    opening.position.set(side * 0.145, 1.39, 0.254);
+    opening.rotation.z = side * -0.035;
+    torso.add(opening);
+  });
+
+  // Shirt collar beneath the jacket collar.
+  [-1, 1].forEach((side) => {
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.20, 0.045), shirtMat);
+    collar.position.set(side * 0.065, 1.69, 0.285);
+    collar.rotation.z = side * 0.36;
+    collar.rotation.x = -0.08;
+    torso.add(collar);
+  });
+
+  // Denim collar with the turned-out 1980s silhouette.
+  [-1, 1].forEach((side) => {
+    const collar = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.24, 0.055), denimMat);
+    collar.position.set(side * 0.165, 1.69, 0.272);
+    collar.rotation.z = side * 0.44;
+    collar.rotation.x = -0.12;
+    torso.add(collar);
+  });
+
+  // Red open puffer vest: individual rounded baffles create the padded silhouette
+  // instead of the previous flat orange boxes.
+  const vestGroup = new THREE.Group();
+  vestGroup.name = 'marty_vest';
+  const baffleY = [1.17, 1.32, 1.47, 1.62];
+  [-1, 1].forEach((side) => {
+    baffleY.forEach((y, index) => {
+      const puff = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), vestMat);
+      const taper = index === 3 ? 0.88 : index === 0 ? 0.94 : 1.0;
+      puff.scale.set(0.175 * taper, 0.072, 0.135);
+      puff.position.set(side * 0.235, y, 0.245);
+      vestGroup.add(puff);
+    });
+
+    // Outer side padding gives the vest a believable wrap around the rib cage.
+    const sidePad = new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.48, 6, 12), vestDarkMat);
+    sidePad.position.set(side * 0.355, 1.40, 0.08);
+    sidePad.rotation.z = side * 0.05;
+    vestGroup.add(sidePad);
+
+    // Narrow padded shoulder yoke.
+    const shoulderPad = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), vestMat);
+    shoulderPad.scale.set(0.18, 0.075, 0.13);
+    shoulderPad.position.set(side * 0.235, 1.735, 0.17);
+    shoulderPad.rotation.z = side * 0.18;
+    vestGroup.add(shoulderPad);
+
+    // Brass-coloured snaps along the vest opening.
+    [1.20, 1.39, 1.58, 1.72].forEach((y) => {
+      const snap = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.017, 12), snapMat);
+      snap.position.set(side * 0.075, y, 0.363);
+      snap.rotation.x = Math.PI / 2;
+      vestGroup.add(snap);
+    });
+  });
+
+  // Quilted rear of the vest so the likeness also reads from third-person camera angles.
+  [1.18, 1.34, 1.50, 1.66].forEach((y, index) => {
+    const backPuff = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), vestMat);
+    backPuff.scale.set(index === 3 ? 0.30 : 0.34, 0.074, 0.105);
+    backPuff.position.set(0, y, -0.265);
+    vestGroup.add(backPuff);
+  });
+  torso.add(vestGroup);
+
+  // Belt visible beneath the untucked/open layers.
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.292, 0.292, 0.075, 24), beltMat);
+  belt.position.y = 0.965;
+  belt.scale.set(1.04, 1.0, 0.72);
+  torso.add(belt);
+
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.055, 0.025), snapMat);
+  buckle.position.set(0, 0.965, 0.235);
+  torso.add(buckle);
+  root.add(torso);
+
+  // -----------------------------
+  // NECK / HEAD / FACIAL FEATURES
+  // -----------------------------
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.125, 0.22, 20), skinMat);
+  neck.position.y = 1.86;
+  root.add(neck);
+
+  const headGroup = new THREE.Group();
+  headGroup.name = 'marty_head';
+  headGroup.position.y = 2.105;
+
+  // More human face proportions than the generic cameo head: narrower forehead,
+  // separate lower jaw and chin, smaller eyes and a projected nose bridge.
+  const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.33, 36, 28), skinMat);
+  cranium.scale.set(0.88, 1.02, 0.90);
+  cranium.position.y = 0.015;
+  headGroup.add(cranium);
+
+  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.245, 30, 22), skinMat);
+  jaw.scale.set(0.93, 0.62, 0.94);
+  jaw.position.set(0, -0.145, 0.020);
+  headGroup.add(jaw);
+
+  const chin = new THREE.Mesh(new THREE.SphereGeometry(0.105, 20, 16), skinShadowMat);
+  chin.scale.set(1.0, 0.52, 0.82);
+  chin.position.set(0, -0.255, 0.115);
+  headGroup.add(chin);
+
+  // Ears with a subtle inner shadow.
+  [-1, 1].forEach((side) => {
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.060, 18, 14), skinMat);
+    ear.scale.set(0.52, 1.12, 0.72);
+    ear.position.set(side * 0.292, -0.015, -0.005);
+    headGroup.add(ear);
+
+    const innerEar = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 10), skinShadowMat);
+    innerEar.scale.set(0.45, 0.9, 0.40);
+    innerEar.position.set(side * 0.303, -0.015, 0.027);
+    headGroup.add(innerEar);
+  });
+
+  // Eyes are intentionally small and inset to avoid the old cartoon/Roblox look.
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xf8f8f3, roughness: 0.35 });
+  const irisMat = new THREE.MeshStandardMaterial({ color: 0x65737a, roughness: 0.24 });
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0x161616 });
+  [-1, 1].forEach((side) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.041, 18, 14), eyeWhiteMat);
+    eye.scale.set(1.0, 0.72, 0.48);
+    eye.position.set(side * 0.103, 0.035, 0.286);
+    headGroup.add(eye);
+
+    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.020, 14, 12), irisMat);
+    iris.scale.z = 0.45;
+    iris.position.set(side * 0.103, 0.034, 0.321);
+    headGroup.add(iris);
+
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.010, 10, 8), pupilMat);
+    pupil.scale.z = 0.40;
+    pupil.position.set(side * 0.103, 0.034, 0.334);
+    headGroup.add(pupil);
+
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.105, 0.020, 0.025), hairMat);
+    brow.position.set(side * 0.102, 0.122, 0.292);
+    brow.rotation.z = side * -0.10;
+    headGroup.add(brow);
+  });
+
+  const noseBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.038, 0.135, 14), skinShadowMat);
+  noseBridge.rotation.x = Math.PI / 2;
+  noseBridge.position.set(0, -0.012, 0.300);
+  headGroup.add(noseBridge);
+
+  const noseTip = new THREE.Mesh(new THREE.SphereGeometry(0.050, 16, 12), skinMat);
+  noseTip.scale.set(0.82, 0.72, 0.85);
+  noseTip.position.set(0, -0.060, 0.358);
+  headGroup.add(noseTip);
+
+  const lipMat = new THREE.MeshStandardMaterial({ color: 0xb97067, roughness: 0.68 });
+  const upperLip = new THREE.Mesh(new THREE.BoxGeometry(0.112, 0.014, 0.018), lipMat);
+  upperLip.position.set(0, -0.164, 0.306);
+  headGroup.add(upperLip);
+  const lowerLip = new THREE.Mesh(new THREE.BoxGeometry(0.095, 0.016, 0.020), lipMat);
+  lowerLip.position.set(0, -0.184, 0.306);
+  headGroup.add(lowerLip);
+
+  // Marty-style 1985 swept / feathered brown hair. Multiple overlapping locks avoid
+  // the helmet-like cap from the old model and create the tall front quiff in the photo.
+  const hairGroup = new THREE.Group();
+  hairGroup.name = 'marty_feathered_hair';
+
+  const backHair = new THREE.Mesh(new THREE.SphereGeometry(0.32, 28, 22), hairMat);
+  backHair.scale.set(0.95, 0.78, 0.88);
+  backHair.position.set(0, 0.185, -0.090);
+  hairGroup.add(backHair);
+
+  // Crown locks swept rearward.
+  const crownLocks = [
+    [-0.18, 0.24, 0.00, -0.38, 0.08],
+    [-0.08, 0.30, 0.03, -0.46, 0.02],
+    [ 0.03, 0.33, 0.05, -0.52,-0.04],
+    [ 0.13, 0.30, 0.02, -0.45,-0.10],
+    [ 0.21, 0.23,-0.01, -0.34,-0.13],
+  ];
+  crownLocks.forEach(([x, y, z, rx, rz]) => {
+    const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.20, 5, 10), hairMat);
+    lock.position.set(x, y, z);
+    lock.rotation.x = rx;
+    lock.rotation.z = rz;
+    hairGroup.add(lock);
+  });
+
+  // Front quiff pushed up and slightly to Marty's right.
+  const quiff = new THREE.Mesh(new THREE.CapsuleGeometry(0.066, 0.24, 6, 12), hairMat);
+  quiff.position.set(0.09, 0.285, 0.170);
+  quiff.rotation.x = -0.82;
+  quiff.rotation.z = -0.30;
+  hairGroup.add(quiff);
+
+  const quiffTip = new THREE.Mesh(new THREE.SphereGeometry(0.085, 18, 14), hairMat);
+  quiffTip.scale.set(0.75, 1.25, 0.58);
+  quiffTip.position.set(0.155, 0.355, 0.115);
+  quiffTip.rotation.z = -0.28;
+  hairGroup.add(quiffTip);
+
+  // Feathered side pieces and short sideburns.
+  [-1, 1].forEach((side) => {
+    const sideLock = new THREE.Mesh(new THREE.CapsuleGeometry(0.050, 0.18, 5, 10), hairMat);
+    sideLock.position.set(side * 0.255, 0.135, 0.015);
+    sideLock.rotation.z = side * -0.52;
+    sideLock.rotation.x = -0.18;
+    hairGroup.add(sideLock);
+
+    const sideburn = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.105, 0.032), hairMat);
+    sideburn.position.set(side * 0.267, -0.015, 0.074);
+    sideburn.rotation.z = side * 0.08;
+    hairGroup.add(sideburn);
+  });
+
+  headGroup.add(hairGroup);
+  root.add(headGroup);
+
+  // -----------------------------
+  // ARMS — denim jacket + rolled checked cuffs + hands
+  // -----------------------------
+  for (const side of [-1, 1]) {
+    const armGroup = new THREE.Group();
+    armGroup.name = side === -1 ? 'arm_left' : 'arm_right';
+    armGroup.position.set(side * 0.43, 1.58, 0.005);
+
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.125, 20, 16), denimMat);
+    shoulder.scale.set(1.05, 1.0, 0.90);
+
+    const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.102, 0.090, 0.38, 18), denimMat);
+    upperArm.position.y = -0.215;
+    upperArm.rotation.z = side * -0.035;
+
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.090, 18, 14), denimDarkMat);
+    elbow.position.y = -0.420;
+
+    const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.090, 0.074, 0.34, 18), denimMat);
+    forearm.position.y = -0.595;
+    forearm.rotation.z = side * 0.025;
+
+    // Rolled cuff exposes the checked shirt lining visible in the reference.
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.081, 0.105, 18), shirtMat);
+    cuff.position.y = -0.785;
+
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.080, 18, 14), skinMat);
+    hand.scale.set(0.76, 1.18, 0.62);
+    hand.position.set(0, -0.885, 0.012);
+
+    const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.032, 12, 10), skinShadowMat);
+    thumb.scale.set(0.80, 1.35, 0.75);
+    thumb.position.set(side * -0.060, -0.882, 0.035);
+
+    armGroup.add(shoulder, upperArm, elbow, forearm, cuff, hand, thumb);
+    root.add(armGroup);
+  }
+
+  // -----------------------------
+  // LEGS — fitted blue jeans + light 1980s sneakers
+  // -----------------------------
+  for (const side of [-1, 1]) {
+    const legGroup = new THREE.Group();
+    legGroup.name = side === -1 ? 'leg_left' : 'leg_right';
+    legGroup.position.set(side * 0.175, 0.84, 0);
+
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.116, 0.45, 20), jeansMat);
+    thigh.position.y = -0.225;
+    thigh.scale.z = 0.90;
+
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.112, 18, 14), jeansMat);
+    knee.scale.set(1.0, 0.78, 0.90);
+    knee.position.y = -0.455;
+
+    const calf = new THREE.Mesh(new THREE.CylinderGeometry(0.110, 0.090, 0.42, 20), jeansMat);
+    calf.position.y = -0.675;
+    calf.scale.z = 0.90;
+
+    const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.085, 0.11, 16), jeansMat);
+    ankle.position.y = -0.925;
+
+    const shoe = new THREE.Group();
+    shoe.position.set(0, -0.995, 0.075);
+    const shoeBody = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.115, 0.315), sneakerMat);
+    shoeBody.position.z = 0.030;
+    const toe = new THREE.Mesh(new THREE.SphereGeometry(0.102, 18, 14), sneakerMat);
+    toe.scale.set(0.90, 0.54, 1.20);
+    toe.position.set(0, 0.005, 0.145);
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.195, 0.040, 0.340), soleMat);
+    sole.position.set(0, -0.072, 0.030);
+    shoe.add(shoeBody, toe, sole);
+
+    legGroup.add(thigh, knee, calf, ankle, shoe);
+    root.add(legGroup);
+  }
+
+  // Make the procedural model react well to the game's real-time lighting.
+  root.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
     }
   });
 
-  if (headGroup) {
-    const hairGroup = new THREE.Group();
-    hairGroup.name = 'marty_feathered_hair';
-
-    // Top Cap positioned high and back (never obscures eyes)
-    const topCap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 24, 24), hairMat);
-    topCap.position.set(0, 0.15, -0.04);
-    topCap.scale.set(0.95, 0.60, 0.82);
-    hairGroup.add(topCap);
-
-    // Iconic Front Quiff / Swoop (Flipped up and over forehead)
-    const frontQuiff = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.30, 12), hairMat);
-    frontQuiff.position.set(0.06, 0.26, 0.16);
-    frontQuiff.rotation.x = -Math.PI / 3.2;
-    frontQuiff.rotation.z = -Math.PI / 7;
-    hairGroup.add(frontQuiff);
-
-    // Feathered Side Bangs/Waves
-    [-1, 1].forEach((side) => {
-      const sideWave = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.32, 10), hairMat);
-      sideWave.position.set(side * 0.26, 0.10, 0.06);
-      sideWave.rotation.z = side * -Math.PI / 4;
-      sideWave.rotation.x = -Math.PI / 6;
-      hairGroup.add(sideWave);
-    });
-
-    // Back Length touching collar
-    const backHair = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.24, 16), hairMat);
-    backHair.position.set(0, -0.06, -0.16);
-    backHair.rotation.x = 0.22;
-    hairGroup.add(backHair);
-
-    headGroup.add(hairGroup);
-  }
-
-  // Outfit: Red/Orange Open Down Vest with Brass Buttons & Denim Jacket Collar
-  const vestGroup = new THREE.Group();
-  vestGroup.name = 'marty_vest';
-
-  // Inner Shirt & Denim Collar
-  const innerShirt = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.50, 0.22), shirtMat);
-  innerShirt.position.set(0, 1.48, 0.12);
-  vestGroup.add(innerShirt);
-
-  const denimCollarL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), denimMat);
-  denimCollarL.position.set(-0.16, 1.68, 0.20);
-  denimCollarL.rotation.z = -0.3;
-  const denimCollarR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), denimMat);
-  denimCollarR.position.set(0.16, 1.68, 0.20);
-  denimCollarR.rotation.z = 0.3;
-  vestGroup.add(denimCollarL, denimCollarR);
-
-  // Open Down Vest Left and Right Puffy Panels with Baffles
-  [-1, 1].forEach((side) => {
-    const vestPanel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.68, 0.38), vestMat);
-    vestPanel.position.set(side * 0.24, 1.36, 0.04);
-    vestGroup.add(vestPanel);
-
-    // Brass Snap Buttons along inner seam
-    [1.18, 1.34, 1.50].forEach((yPos) => {
-      const button = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.02, 8), brassMat);
-      button.position.set(side * 0.11, yPos, 0.22);
-      button.rotation.x = Math.PI / 2;
-      vestGroup.add(button);
-    });
-  });
-
-  root.add(vestGroup);
-
-  // Mattel Pink Hoverboard
-  const hoverboard = new THREE.Group();
-  hoverboard.name = 'signature_prop';
-  hoverboard.position.set(0, 1.35, -0.28);
-  hoverboard.rotation.z = -0.35;
-  const boardTex = createHoverboardTexture();
-  const boardDeck = new THREE.Mesh(
-    new THREE.BoxGeometry(0.26, 0.88, 0.04),
-    new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.3 })
-  );
-  const pad1 = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12), brassMat);
-  pad1.position.set(0, 0.22, 0.025);
-  pad1.rotation.x = Math.PI / 2;
-  const pad2 = pad1.clone();
-  pad2.position.set(0, -0.22, 0.025);
-  hoverboard.add(boardDeck, pad1, pad2);
-  root.add(hoverboard);
-
+  root.scale.setScalar(0.98);
   return root;
 }
 
